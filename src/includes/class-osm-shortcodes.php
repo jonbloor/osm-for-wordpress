@@ -152,7 +152,7 @@ class OSM_Shortcodes {
      *
      * Usage: [osm_waiting_list]
      *
-     * The waiting-list OSM section ID is configured in OSM Settings
+     * OSM Helper base URL and site key are configured in OSM Settings
      * (Waiting List tab). Submissions are written straight into OSM and
      * are not stored in WordPress when OSM accepts them.
      *
@@ -170,7 +170,7 @@ class OSM_Shortcodes {
             $errors = $result['errors'] ?? [];
         }
 
-        $section_configured = is_numeric( get_option( 'osm_waiting_list_section_id', '' ) );
+        $section_configured = OSM_Helper_Client::is_configured();
         $captcha_mode = OSM_Waiting_List::captcha_mode();
         $captcha_site_key = '';
 
