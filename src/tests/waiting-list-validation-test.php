@@ -123,6 +123,112 @@ assert_true(
     'consent label mentions Online Scout Manager'
 );
 
+require_once dirname( __DIR__ ) . '/includes/class-osm-api.php';
+
+// Captcha off does not require a token and does not block an OSM write.
+assert_true( OSM_Waiting_List::captcha_requires_token( 'off' ) === false, 'captcha off does not require a token' );
+assert_true( OSM_Waiting_List::captcha_blocks_osm( 'off', [] ) === false, 'captcha off does not block OSM when no token is posted' );
+assert_true( OSM_Waiting_List::captcha_token_from_post( 'off', [] ) === '', 'captcha off ignores posted tokens' );
+assert_true( OSM_Waiting_List::captcha_requires_token( 'recaptcha' ) === true, 'recaptcha requires a token' );
+assert_true( OSM_Waiting_List::captcha_blocks_osm( 'recaptcha', [] ) === true, 'recaptcha without a token blocks OSM' );
+assert_true( OSM_Waiting_List::captcha_blocks_osm( 'turnstile', [ 'cf-turnstile-response' => 'token' ] ) === false, 'turnstile with a token is not blocked locally' );
+assert_true( OSM_Waiting_List::captcha_verify_succeeded( [ 'success' => true ] ) === true, 'siteverify success is accepted' );
+assert_true( OSM_Waiting_List::captcha_verify_succeeded( [ 'success' => false ] ) === false, 'siteverify failure is rejected' );
+
+// OAuth redirect path is the logged-in admin-post callback and nothing else.
+assert_true(
+    OSM_API::OAUTH_CALLBACK_ADMIN_PATH === 'admin-post.php?action=osm_oauth_callback',
+    'redirect path is admin-post.php?action=osm_oauth_callback'
+);
+assert_true( OSM_API::CODE_CHALLENGE_METHOD === 'S256', 'PKCE method is S256' );
+assert_true( strpos( OSM_API::SCOPES, 'section:member:write' ) !== false, 'scopes include member write' );
+foreach ( [ 'finance', 'administration', 'badge', 'attendance', 'quartermaster', 'flexirecord' ] as $forbidden ) {
+    assert_true( strpos( OSM_API::SCOPES, $forbidden ) === false, 'scopes omit ' . $forbidden );
+}
+
+$verifier = OSM_API::generate_pkce_verifier();
+assert_true( strlen( $verifier ) >= 43 && strlen( $verifier ) <= 128, 'PKCE verifier length is valid' );
+assert_true( (bool) preg_match( '/^[A-Za-z0-9\-_]+$/', $verifier ), 'PKCE verifier is unreserved' );
+$challenge = OSM_API::pkce_challenge( $verifier );
+$expected_challenge = rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
+assert_true( $challenge === $expected_challenge, 'PKCE challenge is S256 base64url' );
+
+$auth_args = OSM_API::build_http_args(
+    'POST',
+    [
+        'grant_type'    => 'authorization_code',
+        'code'          => 'code',
+        'redirect_uri'  => 'https://example.test/wp-admin/admin-post.php?action=osm_oauth_callback',
+        'client_id'     => 'client-id',
+        'client_secret' => 'not-a-real-secret',
+        'code_verifier' => 'verifier',
+    ],
+    false
+);
+assert_true( ( $auth_args['headers']['Content-Type'] ?? '' ) === 'application/x-www-form-urlencoded', 'auth code token body sets form content type' );
+parse_str( (string) $auth_args['body'], $auth_body );
+assert_true( ( $auth_body['grant_type'] ?? '' ) === 'authorization_code', 'auth code grant_type' );
+assert_true( ( $auth_body['redirect_uri'] ?? '' ) === 'https://example.test/wp-admin/admin-post.php?action=osm_oauth_callback', 'redirect_uri is unchanged' );
+assert_true( isset( $auth_body['code'], $auth_body['client_id'], $auth_body['client_secret'], $auth_body['code_verifier'] ), 'auth code body has code, client, and verifier' );
+
+$cc_args = OSM_API::build_http_args(
+    'POST',
+    [
+        'grant_type'    => 'client_credentials',
+        'client_id'     => 'client-id',
+        'client_secret' => 'not-a-real-secret',
+        'scope'         => OSM_API::SCOPES,
+    ],
+    false
+);
+assert_true( ( $cc_args['headers']['Content-Type'] ?? '' ) === 'application/x-www-form-urlencoded', 'client credentials body sets form content type' );
+parse_str( (string) $cc_args['body'], $cc_body );
+assert_true( ( $cc_body['grant_type'] ?? '' ) === 'client_credentials', 'client credentials grant_type' );
+assert_true( ( $cc_body['scope'] ?? '' ) === OSM_API::SCOPES, 'client credentials scope' );
+
+$refresh_args = OSM_API::build_http_args( 'POST', [ 'grant_type' => 'refresh_token', 'refresh_token' => 'refresh' ], false );
+parse_str( (string) $refresh_args['body'], $refresh_body );
+assert_true( ( $refresh_body['grant_type'] ?? '' ) === 'refresh_token', 'refresh grant_type' );
+
+// A stored block refuses a request before any HTTP call.
+$refused = false;
+try {
+    OSM_API::assert_requests_allowed( [ 'at' => 1, 'header' => '1' ] );
+} catch ( Exception $e ) {
+    $refused = strpos( $e->getMessage(), 'blocked' ) !== false;
+}
+assert_true( $refused, 'blocked flag refuses a request' );
+$allowed = true;
+try {
+    OSM_API::assert_requests_allowed( false );
+} catch ( Exception $e ) {
+    $allowed = false;
+}
+assert_true( $allowed, 'missing block flag allows a request' );
+assert_true( OSM_API::endpoint_is_removed( '/oauth/token', [ '/oauth/token' => [ 'date' => '2000-01-01' ] ] ) === true, 'removed endpoint is refused' );
+
+$blocked_response = OSM_API::assess_response( 200, [ 'X-Blocked' => '1', 'X-RateLimit-Remaining' => '0' ], '{"ok":true}' );
+assert_true( $blocked_response['blocked'] === true && $blocked_response['ok'] === false, 'X-Blocked fails the response and does not count as success' );
+assert_true( isset( $blocked_response['rate_limit']['x-ratelimit-remaining'] ), 'X-RateLimit header is read' );
+
+$limited = OSM_API::assess_response( 429, [ 'Retry-After' => '30' ], '{"error":"rate_limited"}' );
+assert_true( $limited['ok'] === false && $limited['retry_after'] === '30', 'HTTP 429 keeps Retry-After and is not a success' );
+assert_true( strpos( (string) $limited['error_message'], 'does not retry' ) !== false, 'HTTP 429 is not retried in a loop' );
+
+$http_error = OSM_API::assess_response(
+    401,
+    [],
+    '{"error":"invalid_client","error_description":"Client authentication failed"}'
+);
+assert_true( $http_error['ok'] === false, 'HTTP 401 is a failure' );
+assert_true( strpos( (string) $http_error['error_message'], 'invalid_client' ) !== false, 'HTTP 401 surfaces error' );
+assert_true( strpos( (string) $http_error['error_message'], 'Client authentication failed' ) !== false, 'HTTP 401 surfaces error_description' );
+
+$future = OSM_API::assess_response( 200, [ 'X-Deprecated' => '2099-01-01' ], '{"items":[]}' );
+assert_true( $future['ok'] === true && $future['deprecated'] === '2099-01-01' && $future['deprecated_removed'] === false, 'future X-Deprecated is surfaced but still usable' );
+$past = OSM_API::assess_response( 200, [ 'X-Deprecated' => '2000-01-01' ], '{"items":[]}' );
+assert_true( $past['deprecated_removed'] === true && $past['ok'] === false, 'past X-Deprecated refuses the endpoint' );
+
 if ( $failures > 0 ) {
     echo "\n{$failures} failure(s)\n";
     exit( 1 );

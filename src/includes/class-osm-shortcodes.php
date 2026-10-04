@@ -171,6 +171,38 @@ class OSM_Shortcodes {
         }
 
         $section_configured = is_numeric( get_option( 'osm_waiting_list_section_id', '' ) );
+        $captcha_mode = OSM_Waiting_List::captcha_mode();
+        $captcha_site_key = '';
+
+        if ( $captcha_mode === 'recaptcha' ) {
+            $captcha_site_key = (string) get_option( 'osm_recaptcha_site_key', '' );
+            if ( $captcha_site_key !== '' ) {
+                wp_enqueue_script(
+                    'osm-recaptcha',
+                    'https://www.google.com/recaptcha/api.js',
+                    [],
+                    null,
+                    [
+                        'in_footer' => true,
+                        'strategy'  => 'defer',
+                    ]
+                );
+            }
+        } elseif ( $captcha_mode === 'turnstile' ) {
+            $captcha_site_key = (string) get_option( 'osm_turnstile_site_key', '' );
+            if ( $captcha_site_key !== '' ) {
+                wp_enqueue_script(
+                    'osm-turnstile',
+                    'https://challenges.cloudflare.com/turnstile/v0/api.js',
+                    [],
+                    null,
+                    [
+                        'in_footer' => true,
+                        'strategy'  => 'defer',
+                    ]
+                );
+            }
+        }
 
         ob_start();
         include OSM_TEMPLATES_DIR . '/shortcode/waiting-list.php';

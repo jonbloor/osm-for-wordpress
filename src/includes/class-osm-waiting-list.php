@@ -240,6 +240,17 @@ class OSM_Waiting_List {
             ];
         }
 
+        // Captcha is verified before any OSM call. Off keeps the honeypot and rate limit only.
+        $captcha_error = self::enforce_captcha( $post );
+        if ( $captcha_error !== null ) {
+            return [
+                'success' => false,
+                'message' => 'Please correct the highlighted fields and try again.',
+                'errors'  => [ 'captcha' => $captcha_error ],
+                'values'  => $values,
+            ];
+        }
+
         try {
             $payload = self::build_osm_payload( $values );
             OSM_API::create_waiting_list_member( (string) $section_id, $payload );
@@ -314,6 +325,133 @@ class OSM_Waiting_List {
      */
     public static function consent_label() {
         return 'I agree that the group may store these details in Online Scout Manager to manage the waiting list.';
+    }
+
+    /**
+     * Configured spam-protection mode: off, recaptcha, or turnstile.
+     *
+     * @return string
+     */
+    public static function captcha_mode() {
+        if ( ! function_exists( 'get_option' ) ) {
+            return 'off';
+        }
+        $mode = get_option( 'osm_waiting_list_captcha', 'off' );
+        if ( ! in_array( $mode, [ 'off', 'recaptcha', 'turnstile' ], true ) ) {
+            return 'off';
+        }
+        return $mode;
+    }
+
+    /**
+     * Captcha off does not require a token. reCAPTCHA and Turnstile do.
+     *
+     * @param string $mode Captcha mode.
+     * @return bool
+     */
+    public static function captcha_requires_token( $mode ) {
+        return $mode === 'recaptcha' || $mode === 'turnstile';
+    }
+
+    /**
+     * Token field posted by the widget. Empty when captcha is off.
+     *
+     * @param string $mode Captcha mode.
+     * @param array  $post Posted fields.
+     * @return string
+     */
+    public static function captcha_token_from_post( $mode, array $post ) {
+        if ( $mode === 'recaptcha' ) {
+            return trim( (string) ( $post['g-recaptcha-response'] ?? '' ) );
+        }
+        if ( $mode === 'turnstile' ) {
+            return trim( (string) ( $post['cf-turnstile-response'] ?? '' ) );
+        }
+        return '';
+    }
+
+    /**
+     * True when this mode would block an OSM write because no token was posted.
+     * Does not call the captcha provider.
+     *
+     * @param string $mode Captcha mode.
+     * @param array  $post Posted fields.
+     * @return bool
+     */
+    public static function captcha_blocks_osm( $mode, array $post ) {
+        if ( ! self::captcha_requires_token( $mode ) ) {
+            return false;
+        }
+        return self::captcha_token_from_post( $mode, $post ) === '';
+    }
+
+    /**
+     * Whether a siteverify JSON body says the token was accepted.
+     *
+     * @param mixed $decoded Decoded JSON.
+     * @return bool
+     */
+    public static function captcha_verify_succeeded( $decoded ) {
+        return is_array( $decoded ) && ! empty( $decoded['success'] );
+    }
+
+    /**
+     * Verify captcha server-side. Returns an error string, or null when the
+     * submission may continue to OSM. Does not log secrets.
+     *
+     * @param array $post Posted fields.
+     * @return string|null
+     */
+    private static function enforce_captcha( array $post ) {
+        $mode = self::captcha_mode();
+        if ( ! self::captcha_requires_token( $mode ) ) {
+            return null;
+        }
+
+        $token = self::captcha_token_from_post( $mode, $post );
+        if ( $token === '' ) {
+            return 'Please complete the spam check and try again.';
+        }
+
+        $secret_option = $mode === 'recaptcha' ? 'osm_recaptcha_secret_key' : 'osm_turnstile_secret_key';
+        $secret = get_option( $secret_option, '' );
+        if ( ! is_string( $secret ) || $secret === '' ) {
+            return 'The spam check is not configured yet. Please contact the group.';
+        }
+
+        $url = $mode === 'recaptcha'
+            ? 'https://www.google.com/recaptcha/api/siteverify'
+            : 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+
+        $response = wp_remote_post(
+            $url,
+            [
+                'timeout'     => 15,
+                'redirection' => 0,
+                'headers'     => [
+                    'Content-Type' => 'application/x-www-form-urlencoded',
+                ],
+                'body'        => http_build_query(
+                    [
+                        'secret'   => $secret,
+                        'response' => $token,
+                        'remoteip' => isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '',
+                    ]
+                ),
+            ]
+        );
+
+        if ( is_wp_error( $response ) ) {
+            error_log( 'OSM waiting list captcha verification failed to reach the provider.' );
+            return 'Sorry, the spam check could not be verified. Please try again.';
+        }
+
+        $decoded = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+        if ( ! self::captcha_verify_succeeded( $decoded ) ) {
+            return 'Please complete the spam check and try again.';
+        }
+
+        return null;
     }
 
     private static function is_blank( $value ) {

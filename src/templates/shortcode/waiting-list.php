@@ -7,6 +7,8 @@
  * @var array      $values
  * @var array      $errors
  * @var bool       $section_configured
+ * @var string     $captcha_mode
+ * @var string     $captcha_site_key
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -150,9 +152,24 @@ $field_class = static function ( $key ) use ( $errors ) {
                 <?php if ( $err( 'consent' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'consent' ) ); ?></p><?php endif; ?>
             </div>
 
+            <?php if ( OSM_Waiting_List::captcha_requires_token( $captcha_mode ) ) : ?>
+                <div class="<?php echo esc_attr( $field_class( 'captcha' ) ); ?> osm-wl-captcha">
+                    <?php if ( $captcha_site_key === '' ) : ?>
+                        <p class="osm-wl-error">This form is not available yet. Please contact the group.</p>
+                    <?php elseif ( $captcha_mode === 'recaptcha' ) : ?>
+                        <div class="g-recaptcha" data-sitekey="<?php echo esc_attr( $captcha_site_key ); ?>"></div>
+                    <?php elseif ( $captcha_mode === 'turnstile' ) : ?>
+                        <div class="cf-turnstile" data-sitekey="<?php echo esc_attr( $captcha_site_key ); ?>"></div>
+                    <?php endif; ?>
+                    <?php if ( $err( 'captcha' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'captcha' ) ); ?></p><?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ( ! OSM_Waiting_List::captcha_requires_token( $captcha_mode ) || $captcha_site_key !== '' ) : ?>
             <p class="osm-wl-actions">
                 <button type="submit" name="osm_waiting_list_submit" value="1" class="osm-wl-submit">Join the waiting list</button>
             </p>
+            <?php endif; ?>
         </form>
     <?php endif; ?>
 </div>

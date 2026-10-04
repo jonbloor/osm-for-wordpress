@@ -27,9 +27,13 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 
 ## Setup
 
-### Step 1: Generate Your Client ID and Secret
+Use **one** OSM application. The recommended grant is **authorization code** with PKCE (`code_challenge_method=S256`). The WordPress site must be **https**. Scopes requested are `section:programme:read`, `section:event:read`, and `section:member:write` (the smallest set that can still write a waiting-list member). Do not request finance, administration, badge, attendance, quartermaster, or flexirecord.
 
-To authenticate with the OSM API, you'll need a **Client ID** and **Client Secret**. Follow these steps to generate them:
+The redirect URL is exactly `admin_url( 'admin-post.php?action=osm_oauth_callback' )`, which on a site is `https://{host}/wp-admin/admin-post.php?action=osm_oauth_callback`. Copy it from **OSM Settings → Authentication**. It has no extra parameters and must match the `redirect_uri` the plugin sends.
+
+Do **not** tick **Client Credentials Grant** unless you are using the single-user client-credentials mode below.
+
+### Step 1: Create the OSM application (authorization code)
 
 1. Log in to [Online Scout Manager (OSM)](https://www.onlinescoutmanager.co.uk).
 2. Expand the **Settings** menu at the bottom of the page.
@@ -37,14 +41,36 @@ To authenticate with the OSM API, you'll need a **Client ID** and **Client Secre
 4. Click **Developer Tools** from the menu on the left-hand side.
 5. Click **Create Application**.
 6. Provide a name for your application and click **Save**.
-7. The **Client ID** and **Client Secret** will be displayed **once only**. Make sure to copy and save them securely.
+7. Enter **I am a developer** into the Confirmation box and click **Reveal Credentials**.
+8. The **Client ID** and **Client Secret** will be displayed **once only**. Copy them.
+9. Register the plugin's **Redirect URL** (copied from the settings page) on the OSM application. It must be https.
+10. Leave **Client Credentials Grant** unticked.
 
-### Step 2: Authenticate with OSM
+### Step 2: Connect from WordPress
 
 1. Go to **OSM Settings** in the WordPress admin menu.
-2. Click on the **Authentication** tab.
-3. Enter your **Client ID** and **Client Secret**.
-4. Click **Save & Authenticate** to validate your credentials.
+2. Open the **Authentication** tab.
+3. Leave the grant on **Authorization code with PKCE**.
+4. Enter the **Client ID** and **Client Secret** and click **Save settings**. Leaving the secret blank later does not wipe a stored secret.
+5. Click **Connect with OSM**. The browser goes to OSM and returns to `wp-admin/admin-post.php?action=osm_oauth_callback`.
+6. Access and refresh tokens are stored in WordPress options, not in the page HTML. The plugin refreshes the access token when it expires.
+
+A failed authorisation does **not** delete the stored client ID or secret. The admin notice includes OSM's `error` and `error_description`.
+
+### Client credentials (single user only)
+
+Client credentials are only for the OSM user who created the application, and only if that application has the grant enabled.
+
+1. Create the application as above and reveal the credentials.
+2. Close the window, then on the application you just created, click **Edit**.
+3. Tick the box labelled **Client Credentials Grant** and click **Save**.
+4. In WordPress, select **Client credentials grant**, paste the Client ID and Client Secret, and click **Save & Authenticate**.
+
+Same scopes. Do not use this mode for a site other people use.
+
+### Blocks, invalid data, and rate limits
+
+OSM can block an application that sends invalid data or keeps calling after a warning. This plugin validates waiting-list input before it calls OSM. If a response includes `X-Blocked`, it stores `osm_api_blocked` and refuses every further OSM request until an administrator clears the block. `X-Deprecated` is logged and shown with its date; an endpoint past that date is not called again. HTTP 429 honours `Retry-After` by stopping (it does not retry in a loop).
 
 ### Step 3: Enable Sections
 
@@ -113,9 +139,17 @@ Example for testing only: the 4th Ashby waiting list section ID is `60830`. Othe
 
 **Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required).
 
-On a successful OSM write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit.
+On a successful OSM write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
 
-Your OSM OAuth application needs the `section:member:write` scope in addition to the existing programme/event read scopes. Re-authenticate under **OSM Settings → Authentication** after updating so a fresh token is issued.
+Optional spam protection (per site, checked on the server before any OSM call):
+
+- **Off** — honeypot and rate limit only. No captcha token is required.
+- **Google reCAPTCHA** (v2 checkbox) — site key and secret key from the [Google reCAPTCHA admin](https://www.google.com/recaptcha/admin). Verified at `https://www.google.com/recaptcha/api/siteverify`.
+- **Cloudflare Turnstile** — site key and secret key from the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile). Verified at `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
+
+Setting keys: `osm_waiting_list_captcha` (`off`, `recaptcha`, or `turnstile`), `osm_recaptcha_site_key`, `osm_recaptcha_secret_key`, `osm_turnstile_site_key`, `osm_turnstile_secret_key`. A blank secret field does not wipe a stored secret. Failed verification shows a form error and does not call OSM.
+
+Your OSM OAuth application needs `section:member:write` as well as the programme and event read scopes. Reconnect under **OSM Settings → Authentication** after updating so a fresh token is issued.
 
 ---
 
@@ -131,7 +165,9 @@ Your OSM OAuth application needs the `section:member:write` scope in addition to
   - Enable or disable specific sections.
 
 - **Authentication Tab**:
-  - Enter and manage your OSM **Client ID** and **Client Secret**.
+  - Recommended: authorization code + PKCE. Copy the redirect URL into OSM. Do not tick Client Credentials Grant.
+  - Optional: client credentials after you Edit the OSM application and tick **Client Credentials Grant**, then Save.
+  - Clear an `X-Blocked` stop once the cause is fixed.
 
 - **Advanced Options**:
   - **Date Format**: Customize the date format used in the plugin. Default: `d/m/Y`.
@@ -140,6 +176,7 @@ Your OSM OAuth application needs the `section:member:write` scope in addition to
 - **Waiting List**:
   - Set the OSM section ID that `[osm_waiting_list]` submissions are written into.
   - Example for testing only: `60830` (4th Ashby waiting list). Leave blank or set your own group's section ID — never rely on a hardcoded default.
+  - Choose spam protection: off, Google reCAPTCHA, or Cloudflare Turnstile. Keys are per site.
 
 ---
 
