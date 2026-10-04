@@ -9,6 +9,7 @@ class OSM_Shortcodes {
     public function __construct() {
         add_shortcode( 'osm_programme', [ $this, 'render_programme' ] );
         add_shortcode( 'osm_events', [ $this, 'render_events' ] );
+        add_shortcode( 'osm_waiting_list', [ $this, 'render_waiting_list' ] );
     }
 
     /**
@@ -144,5 +145,35 @@ class OSM_Shortcodes {
             include OSM_TEMPLATES_DIR . '/shortcode/error.php';
             return ob_get_clean();
         }
+    }
+
+    /**
+     * Render the public waiting-list form shortcode.
+     *
+     * Usage: [osm_waiting_list]
+     *
+     * The waiting-list OSM section ID is configured in OSM Settings
+     * (Waiting List tab). Submissions are written straight into OSM and
+     * are not stored in WordPress when OSM accepts them.
+     *
+     * @param array $atts Shortcode attributes (unused).
+     * @return string Shortcode output
+     */
+    public function render_waiting_list( $atts = [] ) {
+        $result = null;
+        $values = [];
+        $errors = [];
+
+        if ( isset( $_SERVER['REQUEST_METHOD'] ) && $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['osm_waiting_list_submit'] ) ) {
+            $result = OSM_Waiting_List::handle_submission( wp_unslash( $_POST ) );
+            $values = $result['values'] ?? [];
+            $errors = $result['errors'] ?? [];
+        }
+
+        $section_configured = is_numeric( get_option( 'osm_waiting_list_section_id', '' ) );
+
+        ob_start();
+        include OSM_TEMPLATES_DIR . '/shortcode/waiting-list.php';
+        return ob_get_clean();
     }
 }

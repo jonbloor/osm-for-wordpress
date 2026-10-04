@@ -8,6 +8,7 @@ class OSM_Admin {
         add_action( 'admin_post_osm_purge_cache', [ $this, 'purge_cache' ] );
         add_action( 'admin_post_osm_reset_configuration', [ $this, 'reset_configuration' ] );
         add_action( 'admin_post_osm_save_advanced_options', [ $this, 'save_advanced_options' ] );
+        add_action( 'admin_post_osm_save_waiting_list', [ $this, 'save_waiting_list' ] );
         add_action( 'admin_notices', [ $this, 'display_admin_notices' ] );
     }
 
@@ -24,6 +25,7 @@ class OSM_Admin {
             'osm_date_format' => OSM_Options::get_date_format() ?? '',
             'osm_time_format' => OSM_Options::get_time_format() ?? '',
         ];
+        $waiting_list_section_id = get_option( 'osm_waiting_list_section_id', '' );
 
         include OSM_TEMPLATES_DIR . '/admin/settings.php';
     }
@@ -114,6 +116,7 @@ class OSM_Admin {
         delete_option( 'osm_client_id' );
         delete_option( 'osm_client_secret' );
         delete_option( 'osm_enabled_sections' );
+        delete_option( 'osm_waiting_list_section_id' );
 
         // Delete cached current term options
         global $wpdb;
@@ -122,6 +125,26 @@ class OSM_Admin {
         set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Configuration reset successfully.' ], 10 );
 
         wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress' ) );
+        exit;
+    }
+
+
+    public function save_waiting_list() {
+        check_admin_referer( 'osm_waiting_list_nonce' );
+
+        $section_id = sanitize_text_field( $_POST['osm_waiting_list_section_id'] ?? '' );
+
+        if ( $section_id === '' ) {
+            delete_option( 'osm_waiting_list_section_id' );
+            set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Waiting list section cleared.' ], 10 );
+        } elseif ( ! ctype_digit( $section_id ) ) {
+            set_transient( 'osm_admin_notice', [ 'type' => 'error', 'message' => 'Waiting list section ID must be a number.' ], 10 );
+        } else {
+            update_option( 'osm_waiting_list_section_id', $section_id );
+            set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Waiting list section saved.' ], 10 );
+        }
+
+        wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ) );
         exit;
     }
 

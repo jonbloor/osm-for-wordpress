@@ -9,7 +9,8 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 ## Features
 
 - Display section programmes and events using shortcodes.
-- Manage sections, authentication, and cache directly from the WordPress admin.
+- Public waiting-list form shortcode that writes a child straight into a configurable OSM waiting-list section.
+- Manage sections, authentication, waiting-list section ID, and cache directly from the WordPress admin.
 - Dynamically retrieve and cache data from OSM for optimal performance.
 
 ---
@@ -97,6 +98,27 @@ Example:
 
 ---
 
+
+#### Waiting List Shortcode
+
+```plaintext
+[osm_waiting_list]
+```
+
+Shows a public form for joining an OSM waiting list. Set the target **waiting-list section ID** under **OSM Settings → Waiting List** before publishing the form. There is no hardcoded default section.
+
+Example for testing only: the 4th Ashby waiting list section ID is `60830`. Other groups must enter their own section ID in the admin setting — do not treat `60830` as a default that submits anywhere.
+
+**Required fields:** child first name, last name, date of birth (UK day/month/year), postcode; parent 1 first name, last name, email, phone; consent checkbox.
+
+**Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required).
+
+On a successful OSM write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit.
+
+Your OSM OAuth application needs the `section:member:write` scope in addition to the existing programme/event read scopes. Re-authenticate under **OSM Settings → Authentication** after updating so a fresh token is issued.
+
+---
+
 ## Admin Features
 
 - **General Tab**:
@@ -114,6 +136,10 @@ Example:
 - **Advanced Options**:
   - **Date Format**: Customize the date format used in the plugin. Default: `d/m/Y`.
   - **Time Format**: Customize the time format used in the plugin. Default: `H:i`.
+
+- **Waiting List**:
+  - Set the OSM section ID that `[osm_waiting_list]` submissions are written into.
+  - Example for testing only: `60830` (4th Ashby waiting list). Leave blank or set your own group's section ID — never rely on a hardcoded default.
 
 ---
 

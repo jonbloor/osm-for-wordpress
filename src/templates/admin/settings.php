@@ -12,6 +12,7 @@
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=shortcodes' ); ?>" class="nav-tab <?php echo $active_tab === 'shortcodes' ? 'nav-tab-active' : ''; ?>">Shortcodes</a>
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=sections' ); ?>" class="nav-tab <?php echo $active_tab === 'sections' ? 'nav-tab-active' : ''; ?>">Sections Enabled</a>
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=advanced_options' ); ?>" class="nav-tab <?php echo $active_tab === 'advanced_options' ? 'nav-tab-active' : ''; ?>">Advanced Options</a>
+        <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ); ?>" class="nav-tab <?php echo $active_tab === 'waiting_list' ? 'nav-tab-active' : ''; ?>">Waiting List</a>
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=authentication' ); ?>" class="nav-tab <?php echo $active_tab === 'authentication' ? 'nav-tab-active' : ''; ?>">Authentication</a>
     </h2>
 
@@ -93,6 +94,13 @@
         <p>
             <code>[osm_events sectionid="67890" futureonly="false"]</code>
         </p>
+
+        <h3>Waiting List Shortcode</h3>
+        <p>
+            <code>[osm_waiting_list]</code>
+        </p>
+        <p>Shows a public form so a visitor can submit a child onto the waiting-list section configured under the <strong>Waiting List</strong> tab. Successful submissions are written straight into Online Scout Manager and are not stored in WordPress.</p>
+        <p>Set the waiting-list section ID in <strong>OSM Settings → Waiting List</strong> before publishing the shortcode. Example for testing only (4th Ashby waiting list): <code>60830</code> — do not treat this as a default; every group must set their own section ID.</p>
     <?php elseif ( $active_tab === 'sections' ): ?>
         <h2>Sections Enabled</h2>
         <form method="post" action="<?php echo admin_url( 'admin-post.php?action=osm_save_sections' ); ?>">
@@ -139,6 +147,25 @@
                 </tr>
             </table>
             <?php submit_button( 'Save Advanced Options' ); ?>
+        </form>
+    <?php elseif ( $active_tab === 'waiting_list' ): ?>
+        <h2>Waiting List</h2>
+        <p>Configure the Online Scout Manager <strong>section ID</strong> that public waiting-list form submissions should be written into. This is typically a dedicated waiting-list section in OSM, not a Beavers/Cubs/Scouts section.</p>
+        <p><strong>Important:</strong> leave this blank until you are ready. There is no hardcoded default. As a test example only, the 4th Ashby waiting list section ID is <code>60830</code> — other groups must enter their own section ID.</p>
+        <p>Use the shortcode <code>[osm_waiting_list]</code> on any page. When OSM accepts a submission, the plugin does not store the form data in WordPress.</p>
+        <p>Your OSM application must allow the <code>section:member:write</code> scope. After updating this plugin, re-save your Client ID and Client Secret under Authentication so a fresh token is issued.</p>
+        <form method="post" action="<?php echo admin_url( 'admin-post.php?action=osm_save_waiting_list' ); ?>">
+            <?php wp_nonce_field( 'osm_waiting_list_nonce' ); ?>
+            <table class="form-table">
+                <tr>
+                    <th><label for="osm_waiting_list_section_id">Waiting list section ID</label></th>
+                    <td>
+                        <input type="text" id="osm_waiting_list_section_id" name="osm_waiting_list_section_id" value="<?php echo esc_attr( $waiting_list_section_id ); ?>" class="regular-text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. your OSM waiting-list section ID">
+                        <p class="description">Find the section ID in OSM (or listed under General once the section is available to your API credentials). Example for testing only: 60830 (4th Ashby waiting list).</p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button( 'Save Waiting List Settings' ); ?>
         </form>
     <?php elseif ( $active_tab === 'authentication' ): ?>
         <h2>Authentication</h2>

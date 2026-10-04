@@ -45,3 +45,116 @@
     font-size: 18px;
     font-weight: 600;
 }
+/* Waiting list form */
+.osm-waiting-list {
+    max-width: 40rem;
+}
+
+.osm-wl-notice {
+    padding: 12px 16px;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    border: 1px solid #e7e7e7;
+}
+
+.osm-wl-notice--success {
+    background: #f0faf0;
+    border-color: #b7e0b7;
+}
+
+.osm-wl-notice--error {
+    background: #fdf2f2;
+    border-color: #e0b7b7;
+}
+
+.osm-wl-fieldset {
+    border: 1px solid #e7e7e7;
+    border-radius: 5px;
+    padding: 1rem 1.25rem 1.25rem;
+    margin: 0 0 1.25rem;
+}
+
+.osm-wl-fieldset legend {
+    font-weight: 600;
+    padding: 0 0.35rem;
+}
+
+.osm-wl-field {
+    margin-bottom: 0.9rem;
+}
+
+.osm-wl-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.osm-wl-field input[type="text"],
+.osm-wl-field input[type="email"],
+.osm-wl-field input[type="tel"] {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.osm-wl-field--error input {
+    border-color: #b00020;
+}
+
+.osm-wl-error {
+    color: #b00020;
+    margin: 0.35rem 0 0;
+    font-size: 0.9em;
+}
+
+.osm-wl-hint {
+    margin: 0.25rem 0 0.75rem;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.osm-wl-required,
+.osm-wl-optional {
+    font-weight: 400;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.osm-wl-consent {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-weight: 400;
+}
+
+.osm-wl-consent input {
+    margin-top: 0.25rem;
+}
+
+.osm-wl-submit {
+    display: inline-block;
+    padding: 0.65rem 1.25rem;
+    border: none;
+    border-radius: 4px;
+    background: #007bff;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.osm-wl-submit:hover,
+.osm-wl-submit:focus {
+    background: #0069d9;
+}
+
+.osm-wl-hp {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
