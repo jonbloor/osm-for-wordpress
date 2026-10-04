@@ -8,6 +8,8 @@
 declare(strict_types=1);
 
 require_once dirname( __DIR__ ) . '/includes/class-osm-waiting-list.php';
+require_once dirname( __DIR__ ) . '/includes/class-osm-helper-client.php';
+require_once dirname( __DIR__ ) . '/includes/class-osm-api.php';
 
 $failures = 0;
 
@@ -123,72 +125,33 @@ assert_true(
     'consent label mentions Online Scout Manager'
 );
 
-require_once dirname( __DIR__ ) . '/includes/class-osm-api.php';
-
-// Captcha off does not require a token and does not block an OSM write.
+// Captcha off does not require a token and does not block a Helper write.
 assert_true( OSM_Waiting_List::captcha_requires_token( 'off' ) === false, 'captcha off does not require a token' );
-assert_true( OSM_Waiting_List::captcha_blocks_osm( 'off', [] ) === false, 'captcha off does not block OSM when no token is posted' );
+assert_true( OSM_Waiting_List::captcha_blocks_osm( 'off', [] ) === false, 'captcha off does not block when no token is posted' );
 assert_true( OSM_Waiting_List::captcha_token_from_post( 'off', [] ) === '', 'captcha off ignores posted tokens' );
 assert_true( OSM_Waiting_List::captcha_requires_token( 'recaptcha' ) === true, 'recaptcha requires a token' );
-assert_true( OSM_Waiting_List::captcha_blocks_osm( 'recaptcha', [] ) === true, 'recaptcha without a token blocks OSM' );
+assert_true( OSM_Waiting_List::captcha_blocks_osm( 'recaptcha', [] ) === true, 'recaptcha without a token blocks' );
 assert_true( OSM_Waiting_List::captcha_blocks_osm( 'turnstile', [ 'cf-turnstile-response' => 'token' ] ) === false, 'turnstile with a token is not blocked locally' );
 assert_true( OSM_Waiting_List::captcha_verify_succeeded( [ 'success' => true ] ) === true, 'siteverify success is accepted' );
 assert_true( OSM_Waiting_List::captcha_verify_succeeded( [ 'success' => false ] ) === false, 'siteverify failure is rejected' );
 
-// OAuth redirect path is the logged-in admin-post callback and nothing else.
+// OSM Helper client — no OSM OAuth required.
+assert_true( OSM_Helper_Client::DEFAULT_BASE_URL === 'https://osmhelper.co.uk', 'default Helper base URL' );
+assert_true( OSM_Helper_Client::SUBMIT_PATH === '/api/waiting-list/submit', 'Helper submit path' );
 assert_true(
-    OSM_API::OAUTH_CALLBACK_ADMIN_PATH === 'admin-post.php?action=osm_oauth_callback',
-    'redirect path is admin-post.php?action=osm_oauth_callback'
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk' ) === 'https://osmhelper.co.uk/api/waiting-list/submit',
+    'submit URL joins base and path'
 );
-assert_true( OSM_API::CODE_CHALLENGE_METHOD === 'S256', 'PKCE method is S256' );
-assert_true( strpos( OSM_API::SCOPES, 'section:member:write' ) !== false, 'scopes include member write' );
-foreach ( [ 'finance', 'administration', 'badge', 'attendance', 'quartermaster', 'flexirecord' ] as $forbidden ) {
-    assert_true( strpos( OSM_API::SCOPES, $forbidden ) === false, 'scopes omit ' . $forbidden );
-}
-
-$verifier = OSM_API::generate_pkce_verifier();
-assert_true( strlen( $verifier ) >= 43 && strlen( $verifier ) <= 128, 'PKCE verifier length is valid' );
-assert_true( (bool) preg_match( '/^[A-Za-z0-9\-_]+$/', $verifier ), 'PKCE verifier is unreserved' );
-$challenge = OSM_API::pkce_challenge( $verifier );
-$expected_challenge = rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
-assert_true( $challenge === $expected_challenge, 'PKCE challenge is S256 base64url' );
-
-$auth_args = OSM_API::build_http_args(
-    'POST',
-    [
-        'grant_type'    => 'authorization_code',
-        'code'          => 'code',
-        'redirect_uri'  => 'https://example.test/wp-admin/admin-post.php?action=osm_oauth_callback',
-        'client_id'     => 'client-id',
-        'client_secret' => 'not-a-real-secret',
-        'code_verifier' => 'verifier',
-    ],
-    false
+assert_true(
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/' ) === 'https://osmhelper.co.uk/api/waiting-list/submit',
+    'submit URL trims trailing slash'
 );
-assert_true( ( $auth_args['headers']['Content-Type'] ?? '' ) === 'application/x-www-form-urlencoded', 'auth code token body sets form content type' );
-parse_str( (string) $auth_args['body'], $auth_body );
-assert_true( ( $auth_body['grant_type'] ?? '' ) === 'authorization_code', 'auth code grant_type' );
-assert_true( ( $auth_body['redirect_uri'] ?? '' ) === 'https://example.test/wp-admin/admin-post.php?action=osm_oauth_callback', 'redirect_uri is unchanged' );
-assert_true( isset( $auth_body['code'], $auth_body['client_id'], $auth_body['client_secret'], $auth_body['code_verifier'] ), 'auth code body has code, client, and verifier' );
 
-$cc_args = OSM_API::build_http_args(
-    'POST',
-    [
-        'grant_type'    => 'client_credentials',
-        'client_id'     => 'client-id',
-        'client_secret' => 'not-a-real-secret',
-        'scope'         => OSM_API::SCOPES,
-    ],
-    false
-);
-assert_true( ( $cc_args['headers']['Content-Type'] ?? '' ) === 'application/x-www-form-urlencoded', 'client credentials body sets form content type' );
-parse_str( (string) $cc_args['body'], $cc_body );
-assert_true( ( $cc_body['grant_type'] ?? '' ) === 'client_credentials', 'client credentials grant_type' );
-assert_true( ( $cc_body['scope'] ?? '' ) === OSM_API::SCOPES, 'client credentials scope' );
-
-$refresh_args = OSM_API::build_http_args( 'POST', [ 'grant_type' => 'refresh_token', 'refresh_token' => 'refresh' ], false );
-parse_str( (string) $refresh_args['body'], $refresh_body );
-assert_true( ( $refresh_body['grant_type'] ?? '' ) === 'refresh_token', 'refresh grant_type' );
+// Plugin must not expose OSM OAuth connect helpers.
+assert_true( ! method_exists( 'OSM_API', 'build_authorize_url' ), 'OSM_API has no build_authorize_url' );
+assert_true( ! method_exists( 'OSM_API', 'exchange_auth_code' ), 'OSM_API has no exchange_auth_code' );
+assert_true( ! method_exists( 'OSM_API', 'create_waiting_list_member' ), 'OSM_API has no create_waiting_list_member' );
+assert_true( ! defined( 'OSM_API::OAUTH_CALLBACK_ADMIN_PATH' ) && ! ( new ReflectionClass( 'OSM_API' ) )->hasConstant( 'OAUTH_CALLBACK_ADMIN_PATH' ), 'no OAuth callback constant' );
 
 // A stored block refuses a request before any HTTP call.
 $refused = false;

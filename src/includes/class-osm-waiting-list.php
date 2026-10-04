@@ -220,8 +220,7 @@ class OSM_Waiting_List {
             ];
         }
 
-        $section_id = get_option( 'osm_waiting_list_section_id', '' );
-        if ( ! is_numeric( $section_id ) || (int) $section_id <= 0 ) {
+        if ( ! OSM_Helper_Client::is_configured() ) {
             return [
                 'success' => false,
                 'message' => 'The waiting list is not configured yet. Please contact the group.',
@@ -253,7 +252,8 @@ class OSM_Waiting_List {
 
         try {
             $payload = self::build_osm_payload( $values );
-            OSM_API::create_waiting_list_member( (string) $section_id, $payload );
+            // Captcha already verified. Pass through to OSM Helper; do not store in WordPress.
+            OSM_Helper_Client::submit_waiting_list( $payload );
             self::record_rate_limit_hit();
 
             return [
@@ -371,7 +371,7 @@ class OSM_Waiting_List {
     }
 
     /**
-     * True when this mode would block an OSM write because no token was posted.
+     * True when this mode would block a Helper/OSM write because no token was posted.
      * Does not call the captcha provider.
      *
      * @param string $mode Captcha mode.

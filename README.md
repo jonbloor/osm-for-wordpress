@@ -9,8 +9,8 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 ## Features
 
 - Display section programmes and events using shortcodes.
-- Public waiting-list form shortcode that writes a child straight into a configurable OSM waiting-list section.
-- Manage sections, authentication, waiting-list section ID, and cache directly from the WordPress admin.
+- Public waiting-list form shortcode that passes validated submissions to [OSM Helper](https://osmhelper.co.uk), which writes into your OSM waiting-list section using the leader’s existing OSM Helper login.
+- Manage sections, OSM Helper site key, captcha, and cache from the WordPress admin. No OSM client ID or Connect with OSM in WordPress.
 - Dynamically retrieve and cache data from OSM for optimal performance.
 
 ---
@@ -27,62 +27,37 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 
 ## Setup
 
-Use **one** OSM application. The recommended grant is **authorization code** with PKCE (`code_challenge_method=S256`). The WordPress site must be **https**. Scopes requested are `section:programme:read`, `section:event:read`, and `section:member:write` (the smallest set that can still write a waiting-list member). Do not request finance, administration, badge, attendance, quartermaster, or flexirecord.
+### Waiting list (OSM Helper — recommended path)
 
-The redirect URL is exactly `admin_url( 'admin-post.php?action=osm_oauth_callback' )`, which on a site is `https://{host}/wp-admin/admin-post.php?action=osm_oauth_callback`. Copy it from **OSM Settings → Authentication**. It has no extra parameters and must match the `redirect_uri` the plugin sends.
+Parents never log in to OSM. The one-time OSM approval lives in OSM Helper (`https://osmhelper.co.uk/callback`). WordPress only needs:
 
-Do **not** tick **Client Credentials Grant** unless you are using the single-user client-credentials mode below.
+1. **OSM Helper base URL** (default `https://osmhelper.co.uk`)
+2. A **site key** the leader copies from OSM Helper after signing in
 
-### Step 1: Create the OSM application (authorization code)
+In OSM Helper:
 
-1. Log in to [Online Scout Manager (OSM)](https://www.onlinescoutmanager.co.uk).
-2. Expand the **Settings** menu at the bottom of the page.
-3. Select **My Account Details**.
-4. Click **Developer Tools** from the menu on the left-hand side.
-5. Click **Create Application**.
-6. Provide a name for your application and click **Save**.
-7. Enter **I am a developer** into the Confirmation box and click **Reveal Credentials**.
-8. The **Client ID** and **Client Secret** will be displayed **once only**. Copy them.
-9. Register the plugin's **Redirect URL** (copied from the settings page) on the OSM application. It must be https.
-10. Leave **Client Credentials Grant** unticked.
+1. Sign in at [osmhelper.co.uk](https://osmhelper.co.uk).
+2. Open **Settings**.
+3. Under **WordPress waiting-list form**, choose your OSM waiting-list section (do not hardcode another group’s section id).
+4. Save to create a site key, then copy it.
 
-### Step 2: Connect from WordPress
+In WordPress:
 
-1. Go to **OSM Settings** in the WordPress admin menu.
-2. Open the **Authentication** tab.
-3. Leave the grant on **Authorization code with PKCE**.
-4. Enter the **Client ID** and **Client Secret** and click **Save settings**. Leaving the secret blank later does not wipe a stored secret.
-5. Click **Connect with OSM**. The browser goes to OSM and returns to `wp-admin/admin-post.php?action=osm_oauth_callback`.
-6. Access and refresh tokens are stored in WordPress options, not in the page HTML. The plugin refreshes the access token when it expires.
+1. Go to **OSM Settings → Waiting List**.
+2. Confirm the base URL (https).
+3. Paste the site key (leave blank later to keep it).
+4. Optionally enable Google reCAPTCHA or Cloudflare Turnstile.
+5. Publish `[osm_waiting_list]` on a page.
 
-A failed authorisation does **not** delete the stored client ID or secret. The admin notice includes OSM's `error` and `error_description`.
+The plugin validates, applies honeypot and per-IP rate limit, verifies captcha (if enabled), then `POST`s JSON to `OSM Helper /api/waiting-list/submit`. It does **not** store a successful submission in WordPress. Groups do **not** create an OSM application for this plugin.
 
-### Client credentials (single user only)
+### Programme / events (legacy)
 
-Client credentials are only for the OSM user who created the application, and only if that application has the grant enabled.
-
-1. Create the application as above and reveal the credentials.
-2. Close the window, then on the application you just created, click **Edit**.
-3. Tick the box labelled **Client Credentials Grant** and click **Save**.
-4. In WordPress, select **Client credentials grant**, paste the Client ID and Client Secret, and click **Save & Authenticate**.
-
-Same scopes. Do not use this mode for a site other people use.
+Programme and events shortcodes may still use a previously stored OSM token if one exists. This plugin no longer offers Connect with OSM, client ID, or client secret fields. Waiting-list forms do not use that path.
 
 ### Blocks, invalid data, and rate limits
 
-OSM can block an application that sends invalid data or keeps calling after a warning. This plugin validates waiting-list input before it calls OSM. If a response includes `X-Blocked`, it stores `osm_api_blocked` and refuses every further OSM request until an administrator clears the block. `X-Deprecated` is logged and shown with its date; an endpoint past that date is not called again. HTTP 429 honours `Retry-After` by stopping (it does not retry in a loop).
-
-### Step 3: Enable Sections
-
-1. Navigate to the **Sections Enabled** tab.
-2. Select the sections you want to enable by ticking the checkboxes.
-3. Click **Save Sections**. The plugin will automatically fetch and cache the current term for each enabled section.
-
-### Step 4: Verify Configuration
-
-1. Go to the **General** tab.
-2. Verify that your enabled sections are listed along with their current term IDs.
-3. If needed, use the **Purge Cache** or **Reset Configuration** options.
+Waiting-list writes go through OSM Helper, which honours `X-Blocked` (stop), surfaces `X-Deprecated`, and does not retry HTTP 429. Clear a Helper intake block under OSM Helper Settings after fixing the cause.
 
 ---
 
@@ -131,25 +106,21 @@ Example:
 [osm_waiting_list]
 ```
 
-Shows a public form for joining an OSM waiting list. Set the target **waiting-list section ID** under **OSM Settings → Waiting List** before publishing the form. There is no hardcoded default section.
-
-Example for testing only: the 4th Ashby waiting list section ID is `60830`. Other groups must enter their own section ID in the admin setting — do not treat `60830` as a default that submits anywhere.
+Shows a public form for joining an OSM waiting list via OSM Helper. Configure **OSM Helper base URL** and **site key** under **OSM Settings → Waiting List**. The waiting-list **section ID** is chosen in OSM Helper Settings (not in WordPress).
 
 **Required fields:** child first name, last name, date of birth (UK day/month/year), postcode; parent 1 first name, last name, email, phone; consent checkbox.
 
 **Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required).
 
-On a successful OSM write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
+On a successful write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
 
-Optional spam protection (per site, checked on the server before any OSM call):
+Optional spam protection (per site, checked on the server before calling OSM Helper):
 
 - **Off** — honeypot and rate limit only. No captcha token is required.
-- **Google reCAPTCHA** (v2 checkbox) — site key and secret key from the [Google reCAPTCHA admin](https://www.google.com/recaptcha/admin). Verified at `https://www.google.com/recaptcha/api/siteverify`.
-- **Cloudflare Turnstile** — site key and secret key from the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile). Verified at `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
+- **Google reCAPTCHA** (v2 checkbox) — site key and secret key from the [Google reCAPTCHA admin](https://www.google.com/recaptcha/admin).
+- **Cloudflare Turnstile** — site key and secret key from the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
 
-Setting keys: `osm_waiting_list_captcha` (`off`, `recaptcha`, or `turnstile`), `osm_recaptcha_site_key`, `osm_recaptcha_secret_key`, `osm_turnstile_site_key`, `osm_turnstile_secret_key`. A blank secret field does not wipe a stored secret. Failed verification shows a form error and does not call OSM.
-
-Your OSM OAuth application needs `section:member:write` as well as the programme and event read scopes. Reconnect under **OSM Settings → Authentication** after updating so a fresh token is issued.
+Setting keys: `osm_helper_base_url`, `osm_helper_site_key`, `osm_waiting_list_captcha` (`off`, `recaptcha`, or `turnstile`), plus captcha site/secret keys. A blank secret field does not wipe a stored secret. Failed verification shows a form error and does not call OSM Helper.
 
 ---
 
@@ -164,18 +135,13 @@ Your OSM OAuth application needs `section:member:write` as well as the programme
   - List all available sections retrieved from OSM.
   - Enable or disable specific sections.
 
-- **Authentication Tab**:
-  - Recommended: authorization code + PKCE. Copy the redirect URL into OSM. Do not tick Client Credentials Grant.
-  - Optional: client credentials after you Edit the OSM application and tick **Client Credentials Grant**, then Save.
-  - Clear an `X-Blocked` stop once the cause is fixed.
-
 - **Advanced Options**:
   - **Date Format**: Customize the date format used in the plugin. Default: `d/m/Y`.
   - **Time Format**: Customize the time format used in the plugin. Default: `H:i`.
 
 - **Waiting List**:
-  - Set the OSM section ID that `[osm_waiting_list]` submissions are written into.
-  - Example for testing only: `60830` (4th Ashby waiting list). Leave blank or set your own group's section ID — never rely on a hardcoded default.
+  - OSM Helper base URL (default `https://osmhelper.co.uk`) and site key from OSM Helper Settings.
+  - Waiting-list section ID is configured in OSM Helper, not here.
   - Choose spam protection: off, Google reCAPTCHA, or Cloudflare Turnstile. Keys are per site.
 
 ---

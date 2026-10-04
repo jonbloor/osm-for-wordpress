@@ -10,38 +10,17 @@ class OSM_API {
      */
     private static $halt_further = false;
 
-    const AUTHORIZE_URL = 'https://www.onlinescoutmanager.co.uk/oauth/authorize';
-    const TOKEN_URL     = 'https://www.onlinescoutmanager.co.uk/oauth/token';
-
     /**
-     * Documented resource-owner URL. Not requested: a token response is enough
-     * to know the grant succeeded, and this plugin does not need the profile.
+     * Legacy programme/events reads may still refresh a stored token.
+     * Waiting-list writes go through OSM Helper — this plugin no longer
+     * registers its own OSM OAuth application.
      */
-    const RESOURCE_URL = 'https://www.onlinescoutmanager.co.uk/oauth/resource';
-
-    const SCOPES = 'section:programme:read section:event:read section:member:write';
-
-    /**
-     * Logged-in admin callback. redirect_uri is admin_url() of this path only.
-     * On a site: https://{host}/wp-admin/admin-post.php?action=osm_oauth_callback
-     */
-    const OAUTH_CALLBACK_ADMIN_PATH = 'admin-post.php?action=osm_oauth_callback';
-
-    const CODE_CHALLENGE_METHOD = 'S256';
+    const TOKEN_URL = 'https://www.onlinescoutmanager.co.uk/oauth/token';
 
     const OPTION_BLOCKED    = 'osm_api_blocked';
     const OPTION_DEPRECATED = 'osm_api_deprecated';
     const OPTION_REMOVED    = 'osm_api_removed_endpoints';
     const OPTION_RATE_LIMIT = 'osm_api_rate_limit';
-
-    /**
-     * Callback URL registered on the OSM application. No extra query arguments.
-     *
-     * @return string
-     */
-    public static function redirect_uri() {
-        return admin_url( self::OAUTH_CALLBACK_ADMIN_PATH );
-    }
 
     /**
      * @return bool
@@ -89,32 +68,6 @@ class OSM_API {
         return is_string( $path ) && $path !== '' && is_array( $removed_map ) && isset( $removed_map[ $path ] );
     }
 
-    /**
-     * PKCE verifier (43+ unreserved characters from 32 random bytes).
-     *
-     * @return string
-     */
-    public static function generate_pkce_verifier() {
-        return self::base64url( random_bytes( 32 ) );
-    }
-
-    /**
-     * S256 code_challenge for a verifier.
-     *
-     * @param string $verifier PKCE code_verifier.
-     * @return string
-     */
-    public static function pkce_challenge( $verifier ) {
-        return self::base64url( hash( 'sha256', (string) $verifier, true ) );
-    }
-
-    /**
-     * @param string $binary Raw bytes.
-     * @return string
-     */
-    public static function base64url( $binary ) {
-        return rtrim( strtr( base64_encode( $binary ), '+/', '-_' ), '=' );
-    }
 
     /**
      * Case-insensitive header lookup. Null when the header was not sent.
@@ -273,10 +226,9 @@ class OSM_API {
     }
 
     /**
-     * Authorize and retrieve an access token.
-     *
-     * Default mode is authorization code (stored token, refreshed when expired).
-     * Client-credentials is only used when that mode is selected.
+     * Retrieve a stored OSM access token for legacy programme/events reads.
+     * Waiting-list form submissions must use OSM_Helper_Client, not this method.
+     * This plugin no longer offers Connect with OSM or client-credentials setup.
      *
      * @param bool $force Ignore a still-valid stored token.
      * @return string
@@ -290,20 +242,6 @@ class OSM_API {
             return self::$access_token;
         }
 
-        $mode = function_exists( 'get_option' ) ? get_option( 'osm_auth_mode', 'authorization_code' ) : 'authorization_code';
-        if ( $mode === 'client_credentials' ) {
-            return self::authorize_client_credentials( $force );
-        }
-
-        return self::authorize_with_stored_token( $force );
-    }
-
-    /**
-     * @param bool $force Force a refresh when a refresh token exists.
-     * @return string
-     * @throws Exception
-     */
-    private static function authorize_with_stored_token( $force ) {
         $token   = get_option( 'osm_access_token', '' );
         $expires = (int) get_option( 'osm_token_expires_at', 0 );
 
@@ -314,7 +252,7 @@ class OSM_API {
 
         $refresh = get_option( 'osm_refresh_token', '' );
         if ( ! is_string( $refresh ) || $refresh === '' ) {
-            throw new Exception( 'Not connected to OSM. In OSM Settings use Connect with OSM (authorization code).' );
+            throw new Exception( 'No OSM token is available for programme/events. Waiting-list forms use OSM Helper (Settings → Waiting List), not a plugin OSM app.' );
         }
 
         return self::refresh_access_token( $refresh );
@@ -329,7 +267,7 @@ class OSM_API {
         $client_id     = get_option( 'osm_client_id' );
         $client_secret = get_option( 'osm_client_secret' );
         if ( ! $client_id || ! $client_secret ) {
-            throw new Exception( 'Client ID or Secret not set in OSM Settings.' );
+            throw new Exception( 'Legacy OSM credentials are incomplete. Waiting-list forms use OSM Helper instead.' );
         }
 
         $response = self::make_request(
@@ -346,139 +284,6 @@ class OSM_API {
 
         self::store_token_response( $response );
         return self::$access_token;
-    }
-
-    /**
-     * @param bool $force Request a new token even if the stored one is valid.
-     * @return string
-     * @throws Exception
-     */
-    private static function authorize_client_credentials( $force ) {
-        $token   = get_option( 'osm_access_token', '' );
-        $expires = (int) get_option( 'osm_token_expires_at', 0 );
-
-        if ( is_string( $token ) && $token !== '' && ! $force && $expires > ( time() + 60 ) ) {
-            self::$access_token = $token;
-            return $token;
-        }
-
-        $client_id     = get_option( 'osm_client_id' );
-        $client_secret = get_option( 'osm_client_secret' );
-        if ( ! $client_id || ! $client_secret ) {
-            throw new Exception( 'Client ID or Secret not set in OSM Settings.' );
-        }
-
-        $response = self::make_request(
-            self::TOKEN_URL,
-            'POST',
-            [
-                'grant_type'    => 'client_credentials',
-                'client_id'     => $client_id,
-                'client_secret' => $client_secret,
-                'scope'         => self::SCOPES,
-            ],
-            false
-        );
-
-        self::store_token_response( $response );
-        return self::$access_token;
-    }
-
-    /**
-     * Start the authorization-code + PKCE S256 redirect.
-     *
-     * Stores state and code_verifier in a short-lived per-user transient.
-     * Does not call OSM itself.
-     *
-     * @return string Authorize URL.
-     * @throws Exception
-     */
-    public static function build_authorize_url() {
-        $client_id = get_option( 'osm_client_id' );
-        if ( ! $client_id ) {
-            throw new Exception( 'Client ID is not set. Save it before connecting.' );
-        }
-        if ( ! get_option( 'osm_client_secret' ) ) {
-            throw new Exception( 'Client Secret is not set. Save it before connecting.' );
-        }
-
-        $verifier = self::generate_pkce_verifier();
-        $state    = bin2hex( random_bytes( 16 ) );
-
-        set_transient(
-            self::oauth_transient_key(),
-            [
-                'state'    => $state,
-                'verifier' => $verifier,
-            ],
-            10 * 60
-        );
-
-        $params = [
-            'response_type'         => 'code',
-            'client_id'             => $client_id,
-            'redirect_uri'          => self::redirect_uri(),
-            'scope'                 => self::SCOPES,
-            'state'                 => $state,
-            'code_challenge'        => self::pkce_challenge( $verifier ),
-            'code_challenge_method' => self::CODE_CHALLENGE_METHOD,
-        ];
-
-        return self::AUTHORIZE_URL . '?' . http_build_query( $params, '', '&', PHP_QUERY_RFC3986 );
-    }
-
-    /**
-     * Exchange an authorization code for tokens. Does not delete client credentials on failure.
-     *
-     * @param string $code  Authorization code.
-     * @param string $state State from the callback.
-     * @return void
-     * @throws Exception
-     */
-    public static function exchange_auth_code( $code, $state ) {
-        $pending = get_transient( self::oauth_transient_key() );
-        delete_transient( self::oauth_transient_key() );
-
-        $expected = ( is_array( $pending ) && isset( $pending['state'] ) ) ? (string) $pending['state'] : '';
-        $verifier = ( is_array( $pending ) && isset( $pending['verifier'] ) ) ? (string) $pending['verifier'] : '';
-        $given    = (string) $state;
-
-        if ( $expected === '' || $verifier === '' || strlen( $expected ) !== strlen( $given ) || ! hash_equals( $expected, $given ) ) {
-            throw new Exception( 'OSM authorisation state did not match. Please use Connect with OSM again.' );
-        }
-        if ( ! is_string( $code ) || $code === '' ) {
-            throw new Exception( 'OSM did not return an authorisation code.' );
-        }
-
-        $client_id     = get_option( 'osm_client_id' );
-        $client_secret = get_option( 'osm_client_secret' );
-        if ( ! $client_id || ! $client_secret ) {
-            throw new Exception( 'Client ID or Secret not set in OSM Settings.' );
-        }
-
-        $response = self::make_request(
-            self::TOKEN_URL,
-            'POST',
-            [
-                'grant_type'    => 'authorization_code',
-                'code'          => $code,
-                'redirect_uri'  => self::redirect_uri(),
-                'client_id'     => $client_id,
-                'client_secret' => $client_secret,
-                'code_verifier' => $verifier,
-            ],
-            false
-        );
-
-        self::store_token_response( $response );
-    }
-
-    /**
-     * @return string
-     */
-    private static function oauth_transient_key() {
-        $user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-        return 'osm_oauth_' . $user_id;
     }
 
     /**
@@ -651,144 +456,6 @@ class OSM_API {
         }
 
         return $events;
-    }
-
-    /**
-     * Create a child on an OSM waiting-list section and attach parent contacts.
-     *
-     * Uses the documented OSM member lifecycle and contact-update endpoints:
-     * - POST /ext/members/contact/actions/?action=newMember
-     * - POST /ext/members/contact/?action=update (contact groups)
-     *
-     * Sources:
-     * - https://github.com/newcastlescouts/osm-api-docs (OpenAPI: newMember + contact update)
-     * - https://github.com/ollytheninja/OSM-API-Docs (customdata field names: line_1, line_3, postcode)
-     *
-     * Does not store the submission in WordPress when OSM accepts it.
-     *
-     * @param string $section_id OSM section ID (waiting-list section).
-     * @param array  $payload    From OSM_Waiting_List::build_osm_payload().
-     * @return array{scoutid: int}
-     * @throws Exception On API or configuration failure (message safe for logs, not public UI).
-     */
-    public static function create_waiting_list_member( $section_id, array $payload ) {
-        $section_id = (string) $section_id;
-        if ( $section_id === '' || ! ctype_digit( $section_id ) ) {
-            throw new Exception( 'Waiting list section ID is not configured.' );
-        }
-
-        $member = $payload['member'] ?? [];
-        if ( empty( $member['firstname'] ) || empty( $member['lastname'] ) || empty( $member['dob'] ) ) {
-            throw new Exception( 'Member payload is incomplete.' );
-        }
-
-        $token = self::authorize();
-
-        $body = [
-            'firstname'              => $member['firstname'],
-            'lastname'               => $member['lastname'],
-            'dob'                    => $member['dob'],
-            'started'                => $member['started'] ?? date( 'Y-m-d' ),
-            'startedsection'         => $member['startedsection'] ?? date( 'Y-m-d' ),
-            'sectionid'              => $section_id,
-            'originating_section_id' => $section_id,
-        ];
-
-        // Waiting-list sections often have useTerms=false; include term_id when available.
-        try {
-            $term_id = self::get_current_term( $section_id );
-            if ( $term_id ) {
-                $body['term_id'] = $term_id;
-            }
-        } catch ( Exception $e ) {
-            // A block or rate limit must stop the rest of this submission.
-            if ( self::requests_halted() || self::blocked_flag_is_set( get_option( self::OPTION_BLOCKED ) ) ) {
-                throw $e;
-            }
-            // Proceed without term_id for sections that do not use terms.
-        }
-
-        // Source: newcastlescouts/osm-api-docs — POST /ext/members/contact/actions/?action=newMember
-        $created = self::make_request(
-            'https://www.onlinescoutmanager.co.uk/ext/members/contact/actions/?action=newMember',
-            'POST',
-            $body,
-            $token
-        );
-
-        $scoutid = isset( $created['scoutid'] ) ? (int) $created['scoutid'] : 0;
-        if ( ( ! isset( $created['result'] ) || $created['result'] !== 'ok' ) && $scoutid <= 0 ) {
-            throw new Exception( 'OSM did not confirm member creation.' );
-        }
-        if ( $scoutid <= 0 ) {
-            throw new Exception( 'OSM did not return a member ID.' );
-        }
-
-        // Member address / postcode (group_id 6 = Member's own details).
-        // Source: newcastlescouts/osm-api-docs contact groups; field names from ollytheninja customdata columns.
-        $member_details = $payload['member_details'] ?? [];
-        if ( ! empty( $member_details ) ) {
-            self::update_member_contact( $section_id, $scoutid, 6, $member_details, $token );
-        }
-
-        // Primary Contact 1 (group_id 1).
-        $contact1 = $payload['contact1'] ?? [];
-        if ( ! empty( $contact1 ) ) {
-            self::update_member_contact( $section_id, $scoutid, 1, $contact1, $token );
-        }
-
-        // Primary Contact 2 (group_id 2), optional.
-        $contact2 = $payload['contact2'] ?? null;
-        if ( is_array( $contact2 ) && ! empty( $contact2 ) ) {
-            self::update_member_contact( $section_id, $scoutid, 2, $contact2, $token );
-        }
-
-        return [ 'scoutid' => $scoutid ];
-    }
-
-    /**
-     * Update a contact group on a member.
-     *
-     * Source: newcastlescouts/osm-api-docs —
-     * POST /ext/members/contact/?action=update with associated_type=member,
-     * associated_id, group_id, context=members, and data[field]=value pairs.
-     *
-     * Contact group IDs: 1 = Primary Contact 1, 2 = Primary Contact 2,
-     * 6 = Member's own details.
-     *
-     * @param string $section_id Section ID.
-     * @param int    $scoutid    Member scout ID.
-     * @param int    $group_id   Contact group ID.
-     * @param array  $fields     Field => value map.
-     * @param string $token      Bearer token.
-     * @return void
-     */
-    public static function update_member_contact( $section_id, $scoutid, $group_id, array $fields, $token = null ) {
-        if ( $token === null ) {
-            $token = self::authorize();
-        }
-
-        $body = [
-            'associated_type' => 'member',
-            'associated_id'   => (string) $scoutid,
-            'group_id'        => (string) $group_id,
-            'context'         => 'members',
-            'sectionid'       => (string) $section_id,
-        ];
-
-        foreach ( $fields as $key => $value ) {
-            if ( $value === null || $value === '' ) {
-                continue;
-            }
-            $body[ 'data[' . $key . ']' ] = $value;
-        }
-
-        self::make_request(
-            'https://www.onlinescoutmanager.co.uk/ext/members/contact/?action=update',
-            'POST',
-            $body,
-            $token
-        );
     }
 
     /**

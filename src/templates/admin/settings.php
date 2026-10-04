@@ -1,12 +1,10 @@
 <div class="wrap">
     <h1>Online Scout Manager for WordPress</h1>
 
-    <?php if ( empty( $has_client_id ) || empty( $has_client_secret ) ): ?>
-        <div class="notice notice-error"><p><strong>Authentication not configured.</strong> Please configure authentication in the "Authentication" tab.</p></div>
-    <?php elseif ( $auth_mode === 'authorization_code' && empty( $osm_connected ) ): ?>
-        <div class="notice notice-warning"><p><strong>Not connected to OSM.</strong> Save the client ID and secret, then use <strong>Connect with OSM</strong> on the Authentication tab.</p></div>
+    <?php if ( ! OSM_Helper_Client::is_configured() ): ?>
+        <div class="notice notice-warning"><p><strong>Waiting list not linked to OSM Helper.</strong> Open the <strong>Waiting List</strong> tab, set the OSM Helper base URL, and paste the site key from OSM Helper Settings.</p></div>
     <?php elseif ( empty( $enabled_sections ) ): ?>
-        <div class="notice notice-error"><p><strong>No sections enabled.</strong> Please enable sections in the "Sections Enabled" tab.</p></div>
+        <div class="notice notice-info"><p>No programme/events sections enabled. Waiting-list forms do not need that — they go through OSM Helper.</p></div>
     <?php endif; ?>
 
     <h2 class="nav-tab-wrapper">
@@ -15,7 +13,6 @@
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=sections' ); ?>" class="nav-tab <?php echo $active_tab === 'sections' ? 'nav-tab-active' : ''; ?>">Sections Enabled</a>
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=advanced_options' ); ?>" class="nav-tab <?php echo $active_tab === 'advanced_options' ? 'nav-tab-active' : ''; ?>">Advanced Options</a>
         <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ); ?>" class="nav-tab <?php echo $active_tab === 'waiting_list' ? 'nav-tab-active' : ''; ?>">Waiting List</a>
-        <a href="<?php echo admin_url( 'admin.php?page=osm-for-wordpress&tab=authentication' ); ?>" class="nav-tab <?php echo $active_tab === 'authentication' ? 'nav-tab-active' : ''; ?>">Authentication</a>
     </h2>
 
     <?php if ( $active_tab === 'general' ): ?>
@@ -23,7 +20,7 @@
         <p>The following functions allow administrators to perform certain actions when maintaining the website or diagnosing an issue. These should not be used unless you know what they do.</p>
         <ul>
             <li><strong>Purge Cache:</strong> This will remove all cached data from the database. This will not affect the configuration settings.</li>
-            <li><strong>Reset Configuration:</strong> This will remove all configuration settings, including authentication and enabled sections. This will not affect the cached data.</li>
+            <li><strong>Reset Configuration:</strong> This will remove all configuration settings, including OSM Helper keys and enabled sections. This will not affect the cached data.</li>
         </ul>
         
         <div class="osm-actions">
@@ -40,9 +37,9 @@
 
         <h3>Enabled Sections</h3>
         <?php if ( OSM_API::blocked_flag_is_set( $api_blocked ) ): ?>
-            <p><strong>OSM requests are stopped</strong> because the API returned X-Blocked. Clear the block on the Authentication tab before loading sections.</p>
+            <p><strong>Legacy OSM requests are stopped</strong> because the API returned X-Blocked. Waiting-list forms use OSM Helper separately.</p>
         <?php elseif ( empty( $enabled_sections ) ): ?>
-            <p><strong>No sections enabled.</strong></p>
+            <p><strong>No sections enabled</strong> for programme/events shortcodes.</p>
         <?php else: ?>
             <table class="widefat fixed" cellspacing="0">
                 <thead>
@@ -56,11 +53,22 @@
                     <?php $row_count = 1;
                     foreach ( $enabled_sections as $sectionid => $enabled ):
                         $row_count++;
-                        $sectionDetails = OSM_API::get_sections()[$sectionid]; ?>
+                        try {
+                            $sectionDetails = OSM_API::get_sections()[$sectionid] ?? null;
+                        } catch ( Exception $e ) {
+                            $sectionDetails = null;
+                        }
+                        ?>
                         <tr class="<?php echo esc_attr( ($row_count % 2 === 0) ? '' : 'alternate' ); ?>">
-                            <td class="column-columnname"><?php echo esc_html( $sectionDetails['groupname'] . ': ' . $sectionDetails['sectionname'] ); ?></td>
+                            <td class="column-columnname"><?php echo $sectionDetails ? esc_html( $sectionDetails['groupname'] . ': ' . $sectionDetails['sectionname'] ) : esc_html( (string) $sectionid ); ?></td>
                             <td class="column-columnname"><?php echo esc_html( $sectionid ); ?></td>
-                            <td class="column-columnname"><?php echo esc_html( OSM_API::get_current_term( $sectionid ) ); ?></td>
+                            <td class="column-columnname"><?php
+                                try {
+                                    echo esc_html( OSM_API::get_current_term( $sectionid ) );
+                                } catch ( Exception $e ) {
+                                    echo '—';
+                                }
+                            ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -68,7 +76,7 @@
         <?php endif; ?>
 
         <h3>Bugs &amp; Feature Requests</h3>
-        <p>If you encounter any bugs or have feature requests, please report them via the GitHub repository: <a href="https://github.com/alantiller/osm-for-wordpress" target="_blank">alantiller/osm-for-wordpress</a>.</p>
+        <p>If you encounter any bugs or have feature requests, please report them via the GitHub repository: <a href="https://github.com/jonbloor/osm-for-wordpress" target="_blank" rel="noopener noreferrer">jonbloor/osm-for-wordpress</a>.</p>
     <?php elseif ( $active_tab === 'shortcodes' ): ?>
         <h2>Shortcodes</h2>
         <p>Use the following shortcodes to display OSM data on your website:</p>
@@ -81,10 +89,6 @@
             <li><strong>sectionid</strong> (required): The ID of the section to display.</li>
             <li><strong>futureonly</strong> (optional): Set to <code>true</code> to show only future events. Default: <code>false</code>.</li>
         </ul>
-        <p>Example:</p>
-        <p>
-            <code>[osm_programme sectionid="12345" futureonly="true"]</code>
-        </p>
 
         <h3>Events Shortcode</h3>
         <p>
@@ -94,21 +98,17 @@
             <li><strong>sectionid</strong> (required): The ID of the section to display.</li>
             <li><strong>futureonly</strong> (optional): Set to <code>true</code> to show only future events. Default: <code>false</code>.</li>
         </ul>
-        <p>Example:</p>
-        <p>
-            <code>[osm_events sectionid="67890" futureonly="false"]</code>
-        </p>
 
         <h3>Waiting List Shortcode</h3>
         <p>
             <code>[osm_waiting_list]</code>
         </p>
-        <p>Shows a public form so a visitor can submit a child onto the waiting-list section configured under the <strong>Waiting List</strong> tab. Successful submissions are written straight into Online Scout Manager and are not stored in WordPress.</p>
-        <p>Set the waiting-list section ID in <strong>OSM Settings → Waiting List</strong> before publishing the shortcode. Example for testing only (4th Ashby waiting list): <code>60830</code> — do not treat this as a default; every group must set their own section ID.</p>
+        <p>Shows a public form so a visitor can submit a child onto your OSM waiting list. The parent never logs in to OSM. Configure OSM Helper under the <strong>Waiting List</strong> tab. Successful submissions are written by OSM Helper into OSM and are not stored in WordPress.</p>
     <?php elseif ( $active_tab === 'sections' ): ?>
         <h2>Sections Enabled</h2>
+        <p class="description">Programme and events shortcodes still use a legacy OSM token if one exists. Waiting-list forms do <strong>not</strong> use this tab — they go through OSM Helper.</p>
         <?php if ( OSM_API::blocked_flag_is_set( $api_blocked ) ): ?>
-            <div class="notice notice-error"><p>OSM requests are stopped (X-Blocked). Clear the block on the Authentication tab before loading sections. Do not keep calling OSM after a block.</p></div>
+            <div class="notice notice-error"><p>OSM requests are stopped (X-Blocked). Waiting-list intake is separate (OSM Helper).</p></div>
         <?php else: ?>
         <form method="post" action="<?php echo admin_url( 'admin-post.php?action=osm_save_sections' ); ?>">
             <?php wp_nonce_field( 'osm_sections_nonce' ); ?>
@@ -120,7 +120,14 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ( OSM_API::get_sections() as $sectionid => $section ): ?>
+                    <?php
+                    try {
+                        $sections = OSM_API::get_sections();
+                    } catch ( Exception $e ) {
+                        $sections = [];
+                        echo '<tr><td colspan="2">Could not load sections from OSM. Waiting-list forms still work via OSM Helper.</td></tr>';
+                    }
+                    foreach ( $sections as $sectionid => $section ): ?>
                         <tr>
                             <td><?php echo esc_html( $section['groupname'] . ': ' . $section['sectionname'] ); ?></td>
                             <td>
@@ -157,20 +164,26 @@
             <?php submit_button( 'Save Advanced Options' ); ?>
         </form>
     <?php elseif ( $active_tab === 'waiting_list' ): ?>
-        <h2>Waiting List</h2>
-        <p>Configure the Online Scout Manager <strong>section ID</strong> that public waiting-list form submissions should be written into. This is typically a dedicated waiting-list section in OSM, not a Beavers/Cubs/Scouts section.</p>
-        <p><strong>Important:</strong> leave this blank until you are ready. There is no hardcoded default. As a test example only, the 4th Ashby waiting list section ID is <code>60830</code> — other groups must enter their own section ID.</p>
-        <p>Use the shortcode <code>[osm_waiting_list]</code> on any page. When OSM accepts a submission, the plugin does not store the form data in WordPress.</p>
-        <p>The OSM application needs <code>section:programme:read</code>, <code>section:event:read</code>, and <code>section:member:write</code>. Reconnect (or Save &amp; Authenticate, if you use client credentials) after changing scopes so OSM issues a new token.</p>
-        <p>Invalid data sent to OSM can get the application blocked. The form validates before it calls OSM. If OSM sends <code>X-Blocked</code>, the plugin stops every further OSM call until you clear the block.</p>
-        <form method="post" action="<?php echo admin_url( 'admin-post.php?action=osm_save_waiting_list' ); ?>">
+        <h2>Waiting List (via OSM Helper)</h2>
+        <p>Parents fill this form on your website. They never log in to OSM or approve an app. OSM Helper already holds the one-time OSM approval for your group. Choose the waiting-list section and copy the site key in <a href="https://osmhelper.co.uk/settings/" target="_blank" rel="noopener noreferrer">OSM Helper → Settings</a> after you are signed in there.</p>
+        <p>This plugin does <strong>not</strong> ask for an OSM client ID, client secret, or Connect with OSM. Other groups do not need to create an OSM application.</p>
+        <p>Use the shortcode <code>[osm_waiting_list]</code> on any page. When OSM Helper accepts a submission, the plugin does not store the form data in WordPress.</p>
+        <p>Validation, honeypot, per-IP rate limit, and captcha run here first. Captcha (if enabled) is verified on the server before calling OSM Helper.</p>
+        <form method="post" action="<?php echo admin_url( 'admin-post.php?action=osm_save_waiting_list' ); ?>" autocomplete="off">
             <?php wp_nonce_field( 'osm_waiting_list_nonce' ); ?>
             <table class="form-table">
                 <tr>
-                    <th><label for="osm_waiting_list_section_id">Waiting list section ID</label></th>
+                    <th><label for="osm_helper_base_url">OSM Helper base URL</label></th>
                     <td>
-                        <input type="text" id="osm_waiting_list_section_id" name="osm_waiting_list_section_id" value="<?php echo esc_attr( $waiting_list_section_id ); ?>" class="regular-text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. your OSM waiting-list section ID">
-                        <p class="description">Find the section ID in OSM (or listed under General once the section is available to your API credentials). Example for testing only: 60830 (4th Ashby waiting list).</p>
+                        <input type="url" id="osm_helper_base_url" name="osm_helper_base_url" value="<?php echo esc_attr( $helper_base_url ); ?>" class="regular-text" placeholder="https://osmhelper.co.uk">
+                        <p class="description">Default is <code>https://osmhelper.co.uk</code>. Must be https. The plugin posts to <code><?php echo esc_html( OSM_Helper_Client::SUBMIT_PATH ); ?></code> on that host.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_helper_site_key">OSM Helper site key</label></th>
+                    <td>
+                        <input type="password" id="osm_helper_site_key" name="osm_helper_site_key" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $has_helper_site_key ? esc_attr( 'A site key is saved. Leave blank to keep it.' ) : ''; ?>">
+                        <p class="description">Copy from OSM Helper Settings → WordPress waiting-list form. Leave blank to keep the saved key. It is stored in WordPress options and is not shown again.</p>
                     </td>
                 </tr>
                 <tr>
@@ -181,7 +194,7 @@
                             <option value="recaptcha" <?php selected( $captcha_mode, 'recaptcha' ); ?>>Google reCAPTCHA (v2 checkbox)</option>
                             <option value="turnstile" <?php selected( $captcha_mode, 'turnstile' ); ?>>Cloudflare Turnstile</option>
                         </select>
-                        <p class="description">Default is off. Keys are per site. The plugin checks the token on the server before any OSM call. A failed check shows a form error and does not call OSM.</p>
+                        <p class="description">Default is off. Keys are per site. The plugin checks the token on the server before calling OSM Helper. A failed check shows a form error and does not call OSM Helper.</p>
                     </td>
                 </tr>
                 <tr>
@@ -215,115 +228,13 @@
             </table>
             <?php submit_button( 'Save Waiting List Settings' ); ?>
         </form>
-    <?php elseif ( $active_tab === 'authentication' ): ?>
-        <h2>Authentication</h2>
-        <p>Recommended: one OSM application, using the <strong>authorization code</strong> flow. Copy the redirect URL below into that application. Do <strong>not</strong> tick <strong>Client Credentials Grant</strong> unless you are using the single-user client-credentials mode.</p>
-        <?php if ( stripos( $oauth_redirect_url, 'https://' ) !== 0 ): ?>
-            <div class="notice notice-error"><p>The redirect URL is not https. OSM only accepts an https redirect URL, so this site must be served over https before you can connect.</p></div>
-        <?php endif; ?>
-        <table class="form-table">
-            <tr>
-                <th scope="row"><label for="osm_oauth_redirect_url">Redirect URL</label></th>
-                <td>
-                    <input type="text" id="osm_oauth_redirect_url" class="large-text" readonly value="<?php echo esc_attr( $oauth_redirect_url ); ?>" onclick="this.select();">
-                    <p class="description">Paste this into the OSM application exactly. It is <code>admin_url( 'admin-post.php?action=osm_oauth_callback' )</code>, which on this site is <code><?php echo esc_html( $oauth_redirect_url ); ?></code>. No extra parameters. The site must be https.</p>
-                </td>
-            </tr>
-            <tr>
-                <th scope="row">Connection</th>
-                <td>
-                    <?php if ( $osm_connected ): ?>
-                        <p><strong>Connected.</strong>
-                        <?php if ( $token_expires_at ): ?>
-                            Access token expiry (site time): <?php echo esc_html( wp_date( 'Y-m-d H:i', $token_expires_at ) ); ?>.
-                        <?php endif; ?>
-                        The access token and refresh token are stored in WordPress options and are not shown here.</p>
-                    <?php else: ?>
-                        <p><strong>Not connected.</strong> Tokens are stored only after a successful grant, and they are not printed on this page.</p>
-                    <?php endif; ?>
-                </td>
-            </tr>
-        </table>
-
         <?php if ( OSM_API::blocked_flag_is_set( $api_blocked ) ): ?>
-            <div class="notice notice-error inline"><p>OSM returned <strong>X-Blocked</strong>. Further OSM calls are refused until you clear this. Only clear it after the cause is fixed.</p></div>
+            <h3>Legacy OSM block</h3>
+            <p>A previous direct OSM connection stored an X-Blocked flag. Waiting-list intake uses OSM Helper; clear Helper’s WordPress block there if needed.</p>
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php?action=osm_clear_api_block' ) ); ?>">
                 <?php wp_nonce_field( 'osm_clear_api_block' ); ?>
-                <?php submit_button( 'Clear OSM API block', 'delete' ); ?>
+                <?php submit_button( 'Clear legacy OSM API block', 'delete' ); ?>
             </form>
         <?php endif; ?>
-
-        <?php if ( is_array( $api_removed ) && $api_removed ): ?>
-            <div class="notice notice-warning inline"><p>These OSM paths are past their <code>X-Deprecated</code> removal date and will not be called: <?php echo esc_html( implode( ', ', array_keys( $api_removed ) ) ); ?>.</p></div>
-        <?php endif; ?>
-
-        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php?action=osm_save_auth' ) ); ?>" autocomplete="off">
-            <?php wp_nonce_field( 'osm_auth_nonce' ); ?>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">Grant</th>
-                    <td>
-                        <label>
-                            <input type="radio" name="osm_auth_mode" value="authorization_code" <?php checked( $auth_mode, 'authorization_code' ); ?>>
-                            Authorization code with PKCE (recommended)
-                        </label><br>
-                        <label>
-                            <input type="radio" name="osm_auth_mode" value="client_credentials" <?php checked( $auth_mode, 'client_credentials' ); ?>>
-                            Client credentials grant (single user who created the application)
-                        </label>
-                        <p class="description">Use authorization code when other people use the site. Client credentials works only for the OSM user who created the application, and only if that application has <strong>Client Credentials Grant</strong> ticked.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="osm_client_id">Client ID</label></th>
-                    <td>
-                        <input type="text" id="osm_client_id" autocomplete="off" name="osm_client_id" value="" class="regular-text" placeholder="<?php echo $has_client_id ? esc_attr( 'A client ID is saved. Leave blank to keep it.' ) : ''; ?>">
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="osm_client_secret">Client Secret</label></th>
-                    <td>
-                        <input type="password" id="osm_client_secret" autocomplete="new-password" name="osm_client_secret" value="" class="regular-text" placeholder="<?php echo $has_client_secret ? esc_attr( 'A client secret is saved. Leave blank to keep it.' ) : ''; ?>">
-                        <p class="description">Leave the password blank to keep the stored secret. A failed authorisation does not delete the saved client ID or secret.</p>
-                    </td>
-                </tr>
-            </table>
-            <p>
-                <button type="submit" name="osm_auth_action" value="save" class="button button-secondary">Save settings</button>
-                <button type="submit" name="osm_auth_action" value="connect" class="button button-primary">Connect with OSM</button>
-                <button type="submit" name="osm_auth_action" value="client_credentials" class="button">Save &amp; Authenticate</button>
-            </p>
-            <h3>Recommended: authorization code</h3>
-            <ol>
-                <li>Log in to <a href="https://www.onlinescoutmanager.co.uk" target="_blank" rel="noopener noreferrer">Online Scout Manager (OSM)</a>.</li>
-                <li>Expand the <strong>Settings</strong> menu at the bottom of the page.</li>
-                <li>Select <strong>My Account Details</strong>.</li>
-                <li>Click <strong>Developer Tools</strong> from the menu on the left-hand side.</li>
-                <li>Click <strong>Create Application</strong>.</li>
-                <li>Provide a name for your application and click <strong>Save</strong>.</li>
-                <li>Enter <strong>I am a developer</strong> into the Confirmation field and click <strong>Reveal Credentials</strong>.</li>
-                <li>The <strong>Client ID</strong> and <strong>Client Secret</strong> are displayed <em>once only</em>. Copy them into the fields above and click <strong>Save settings</strong>.</li>
-                <li>Copy the <strong>Redirect URL</strong> from this page into the OSM application. It must be https and must match exactly.</li>
-                <li>Do <strong>not</strong> tick <strong>Client Credentials Grant</strong>.</li>
-                <li>Scopes used: <code>section:programme:read</code> <code>section:event:read</code> <code>section:member:write</code>. Do not add finance, administration, badge, attendance, quartermaster, or flexirecord.</li>
-                <li>Click <strong>Connect with OSM</strong>. You return to this site at the redirect URL above. PKCE uses <code>code_challenge_method=S256</code>.</li>
-            </ol>
-            <h3>Client credentials (single user only)</h3>
-            <p>Only the OSM user who created the application can use this, and only after the grant is enabled. After creating the application, Edit it and tick <strong>Client Credentials Grant</strong>, then Save. Same scopes as above.</p>
-            <ol>
-                <li>Log in to <a href="https://www.onlinescoutmanager.co.uk" target="_blank" rel="noopener noreferrer">Online Scout Manager (OSM)</a>.</li>
-                <li>Expand the <strong>Settings</strong> menu at the bottom of the page.</li>
-                <li>Select <strong>My Account Details</strong>.</li>
-                <li>Click <strong>Developer Tools</strong> from the menu on the left-hand side.</li>
-                <li>Click <strong>Create Application</strong>.</li>
-                <li>Provide a name for your application and click <strong>Save</strong>.</li>
-                <li>Enter <strong>I am a developer</strong> into the Confirmation field and click <strong>Reveal Credentials</strong>.</li>
-                <li>The <strong>Client ID</strong> and <strong>Client Secret</strong> will be displayed <em>once only</em>. Make sure you note them down as they will be required in the following steps.</li>
-                <li>Close the window, then on the application you just created, click <strong>Edit</strong>.</li>
-                <li>Tick the box labelled <strong>Client Credentials Grant</strong> and click <strong>Save</strong>.</li>
-                <li>Back here, select <strong>Client credentials grant</strong>, paste the Client ID and Client Secret, and click <strong>Save &amp; Authenticate</strong>.</li>
-            </ol>
-            <p>If OSM rejects the token request, the notice includes OSM’s <code>error</code> and <code>error_description</code>, not only “API HTTP error 401”. Stored credentials are left in place.</p>
-        </form>
     <?php endif; ?>
 </div>
