@@ -5,7 +5,7 @@
  */
 class OSM_Helper_Client {
     const DEFAULT_BASE_URL = 'https://osmhelper.co.uk';
-    const SUBMIT_PATH = '/api/waiting-list/submit';
+    const SUBMIT_PATH = '/api/waiting-list/submit/';
 
     /**
      * @return string Normalised base URL without trailing slash.
@@ -42,7 +42,8 @@ class OSM_Helper_Client {
     public static function submit_url( $base = null ) {
         $base = $base === null ? self::base_url() : rtrim( trim( (string) $base ), '/' );
         // Accept the full endpoint pasted as the base URL.
-        $suffix = self::SUBMIT_PATH;
+        // OSM Helper redirects the no-slash path, so always post to the slash form.
+        $suffix = rtrim( self::SUBMIT_PATH, '/' );
         while ( strlen( $base ) >= strlen( $suffix ) && substr( $base, -strlen( $suffix ) ) === $suffix ) {
             $base = rtrim( substr( $base, 0, -strlen( $suffix ) ), '/' );
         }
@@ -102,7 +103,7 @@ class OSM_Helper_Client {
         }
 
         if ( empty( $data['ok'] ) ) {
-            $err = isset( $data['error'] ) && is_string( $data['error'] ) ? $data['error'] : 'OSM Helper did not confirm the submission.';
+            $err = isset( $data['error'] ) && is_string( $data['error'] ) ? $data['error'] : 'OSM Helper did not confirm the submission (HTTP ' . $status . ').';
             throw new Exception( $err );
         }
 

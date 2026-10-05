@@ -137,17 +137,21 @@ assert_true( OSM_Waiting_List::captcha_verify_succeeded( [ 'success' => false ] 
 
 // OSM Helper client — no OSM OAuth required.
 assert_true( OSM_Helper_Client::DEFAULT_BASE_URL === 'https://osmhelper.co.uk', 'default Helper base URL' );
-assert_true( OSM_Helper_Client::SUBMIT_PATH === '/api/waiting-list/submit', 'Helper submit path' );
+assert_true( OSM_Helper_Client::SUBMIT_PATH === '/api/waiting-list/submit/', 'Helper submit path' );
 assert_true(
-    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/api/waiting-list/submit' ) === 'https://osmhelper.co.uk/api/waiting-list/submit',
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/api/waiting-list/submit' ) === 'https://osmhelper.co.uk/api/waiting-list/submit/',
     'Full endpoint pasted as base is not doubled'
 );
 assert_true(
-    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk' ) === 'https://osmhelper.co.uk/api/waiting-list/submit',
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/api/waiting-list/submit/' ) === 'https://osmhelper.co.uk/api/waiting-list/submit/',
+    'Full endpoint with slash pasted as base is not doubled'
+);
+assert_true(
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk' ) === 'https://osmhelper.co.uk/api/waiting-list/submit/',
     'submit URL joins base and path'
 );
 assert_true(
-    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/' ) === 'https://osmhelper.co.uk/api/waiting-list/submit',
+    OSM_Helper_Client::submit_url( 'https://osmhelper.co.uk/' ) === 'https://osmhelper.co.uk/api/waiting-list/submit/',
     'submit URL trims trailing slash'
 );
 
