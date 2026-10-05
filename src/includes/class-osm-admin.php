@@ -3,11 +3,12 @@
 class OSM_Admin {
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_admin_page' ] );
-        add_action( 'admin_post_osm_save_auth', [ $this, 'save_auth' ] );
+        add_action( 'admin_post_osm_clear_api_block', [ $this, 'clear_api_block' ] );
         add_action( 'admin_post_osm_save_sections', [ $this, 'save_sections' ] );
         add_action( 'admin_post_osm_purge_cache', [ $this, 'purge_cache' ] );
         add_action( 'admin_post_osm_reset_configuration', [ $this, 'reset_configuration' ] );
         add_action( 'admin_post_osm_save_advanced_options', [ $this, 'save_advanced_options' ] );
+        add_action( 'admin_post_osm_save_waiting_list', [ $this, 'save_waiting_list' ] );
         add_action( 'admin_notices', [ $this, 'display_admin_notices' ] );
     }
 
@@ -16,55 +17,65 @@ class OSM_Admin {
     }
 
     public function render_admin_page() {
-        $active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : 'general';
-        $client_id = get_option( 'osm_client_id' );
-        $client_secret = get_option( 'osm_client_secret' );
+        $active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'general';
         $enabled_sections = get_option( 'osm_enabled_sections', [] );
         $advanced_options = [
             'osm_date_format' => OSM_Options::get_date_format() ?? '',
             'osm_time_format' => OSM_Options::get_time_format() ?? '',
         ];
+        $helper_base_url = (string) get_option( 'osm_helper_base_url', OSM_Helper_Client::DEFAULT_BASE_URL );
+        if ( $helper_base_url === '' ) {
+            $helper_base_url = OSM_Helper_Client::DEFAULT_BASE_URL;
+        }
+        $has_helper_site_key = (bool) get_option( 'osm_helper_site_key' );
+        $api_blocked = get_option( OSM_API::OPTION_BLOCKED );
+        $api_deprecated = get_option( OSM_API::OPTION_DEPRECATED );
+        $api_removed = get_option( OSM_API::OPTION_REMOVED, [] );
+        $captcha_mode = get_option( 'osm_waiting_list_captcha', 'off' );
+        if ( ! in_array( $captcha_mode, [ 'off', 'recaptcha', 'turnstile' ], true ) ) {
+            $captcha_mode = 'off';
+        }
+        $recaptcha_site_key = (string) get_option( 'osm_recaptcha_site_key', '' );
+        $turnstile_site_key = (string) get_option( 'osm_turnstile_site_key', '' );
+        $has_recaptcha_secret = (bool) get_option( 'osm_recaptcha_secret_key' );
+        $has_turnstile_secret = (bool) get_option( 'osm_turnstile_secret_key' );
+
+        // Confirmation email.
+        $email_enabled   = OSM_Waiting_List_Email::is_enabled();
+        $email_parent2   = OSM_Waiting_List_Email::send_to_parent2();
+        $group_name      = (string) get_option( 'osm_wl_group_name', '' );
+        $email_from_name = (string) get_option( 'osm_wl_email_from_name', '' );
+        $email_reply_to  = (string) get_option( 'osm_wl_email_reply_to', '' );
+        $email_subject   = OSM_Waiting_List_Email::subject_template();
+        $email_body      = OSM_Waiting_List_Email::body_template();
+
+        // Address lookup.
+        $address_lookup        = OSM_Waiting_List::address_lookup_mode();
+        $google_maps_api_key   = (string) get_option( 'osm_google_maps_api_key', '' );
+        $postcode_server_check = get_option( 'osm_wl_postcode_server_check', '0' ) === '1';
 
         include OSM_TEMPLATES_DIR . '/admin/settings.php';
     }
 
-    public function save_auth() {
-        check_admin_referer( 'osm_auth_nonce' );
-
-        $client_id = sanitize_text_field( $_POST['osm_client_id'] );
-        $client_secret = sanitize_text_field( $_POST['osm_client_secret'] );
-
-        update_option( 'osm_client_id', $client_id );
-        update_option( 'osm_client_secret', $client_secret );
-
-        try {
-            // Attempt to authorize the client
-            OSM_API::authorize(true);
-
-            // Clear the enable sections
-            delete_option( 'osm_enabled_sections' );
-
-            // Set the success message
-            set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Authentication saved and verified successfully.' ], 10 );
-        } catch ( Exception $e ) {
-            // Clear the client ID and secret
-            delete_option( 'osm_client_id' );
-            delete_option( 'osm_client_secret' );
-
-            // Set the error message
-            set_transient( 'osm_admin_notice', [ 'type' => 'error', 'message' => 'Failed to authenticate: ' . $e->getMessage() ], 10 );
-        }
-
-        wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress' ) );
+    public function clear_api_block() {
+        $this->require_admin( 'osm_clear_api_block' );
+        delete_option( OSM_API::OPTION_BLOCKED );
+        set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Legacy OSM API block cleared. Waiting-list forms use OSM Helper; clear blocks there under Settings if intake is stopped.' ], 30 );
+        wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ) );
         exit;
     }
 
     public function save_sections() {
         check_admin_referer( 'osm_sections_nonce' );
 
+        if ( OSM_API::blocked_flag_is_set( get_option( OSM_API::OPTION_BLOCKED ) ) ) {
+            set_transient( 'osm_admin_notice', [ 'type' => 'error', 'message' => 'OSM requests are stopped (X-Blocked). Clear the block before saving sections.' ], 30 );
+            wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=sections' ) );
+            exit;
+        }
+
         $enabled_sections = array_map( 'sanitize_text_field', $_POST['osm_enabled_sections'] ?? [] );
 
-        // Cache current term for each section
         foreach ( $enabled_sections as $sectionid => $value ) {
             OSM_API::get_current_term( $sectionid );
         }
@@ -80,15 +91,15 @@ class OSM_Admin {
     public function save_advanced_options() {
         check_admin_referer( 'osm_advanced_options_nonce' );
 
-        $date_format = sanitize_text_field( $_POST['osm_date_format'] );
-        $time_format = sanitize_text_field( $_POST['osm_time_format'] );
+        $date_format = sanitize_text_field( wp_unslash( $_POST['osm_date_format'] ?? '' ) );
+        $time_format = sanitize_text_field( wp_unslash( $_POST['osm_time_format'] ?? '' ) );
 
         try {
             OSM_Options::set_date_format( $date_format );
             OSM_Options::set_time_format( $time_format );
 
             set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Advanced options saved successfully.' ], 10 );
-    
+
             wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=advanced_options' ) );
             exit;
         } catch ( Exception $e ) {
@@ -111,11 +122,41 @@ class OSM_Admin {
     public function reset_configuration() {
         check_admin_referer( 'osm_reset_nonce' );
 
-        delete_option( 'osm_client_id' );
-        delete_option( 'osm_client_secret' );
-        delete_option( 'osm_enabled_sections' );
+        $options = [
+            'osm_client_id',
+            'osm_client_secret',
+            'osm_enabled_sections',
+            'osm_waiting_list_section_id',
+            'osm_auth_mode',
+            'osm_access_token',
+            'osm_refresh_token',
+            'osm_token_expires_at',
+            'osm_api_blocked',
+            'osm_api_deprecated',
+            'osm_api_removed_endpoints',
+            'osm_api_rate_limit',
+            'osm_waiting_list_captcha',
+            'osm_recaptcha_site_key',
+            'osm_recaptcha_secret_key',
+            'osm_turnstile_site_key',
+            'osm_turnstile_secret_key',
+            'osm_helper_base_url',
+            'osm_helper_site_key',
+            'osm_wl_email_enabled',
+            'osm_wl_email_parent2',
+            'osm_wl_group_name',
+            'osm_wl_email_from_name',
+            'osm_wl_email_reply_to',
+            'osm_wl_email_subject',
+            'osm_wl_email_body',
+            'osm_wl_address_lookup',
+            'osm_google_maps_api_key',
+            'osm_wl_postcode_server_check',
+        ];
+        foreach ( $options as $option ) {
+            delete_option( $option );
+        }
 
-        // Delete cached current term options
         global $wpdb;
         $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'osm_current_term_%'" );
 
@@ -125,11 +166,155 @@ class OSM_Admin {
         exit;
     }
 
+    public function save_waiting_list() {
+        check_admin_referer( 'osm_waiting_list_nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html( 'You do not have permission to manage OSM settings.' ) );
+        }
+
+        $base = sanitize_text_field( wp_unslash( $_POST['osm_helper_base_url'] ?? '' ) );
+        if ( $base === '' ) {
+            $base = OSM_Helper_Client::DEFAULT_BASE_URL;
+        }
+        $base = untrailingslashit( $base );
+        if ( ! preg_match( '#^https://#i', $base ) ) {
+            set_transient( 'osm_admin_notice', [ 'type' => 'error', 'message' => 'OSM Helper base URL must be https.' ], 10 );
+            wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ) );
+            exit;
+        }
+        update_option( 'osm_helper_base_url', $base );
+
+        $this->update_secret_option( 'osm_helper_site_key', wp_unslash( $_POST['osm_helper_site_key'] ?? '' ) );
+
+        // Section ID now lives in OSM Helper; clear any leftover WordPress option.
+        delete_option( 'osm_waiting_list_section_id' );
+
+        $captcha = sanitize_text_field( wp_unslash( $_POST['osm_waiting_list_captcha'] ?? 'off' ) );
+        if ( ! in_array( $captcha, [ 'off', 'recaptcha', 'turnstile' ], true ) ) {
+            $captcha = 'off';
+        }
+        update_option( 'osm_waiting_list_captcha', $captcha );
+
+        $this->update_visible_option( 'osm_recaptcha_site_key', wp_unslash( $_POST['osm_recaptcha_site_key'] ?? '' ) );
+        $this->update_visible_option( 'osm_turnstile_site_key', wp_unslash( $_POST['osm_turnstile_site_key'] ?? '' ) );
+        $this->update_secret_option( 'osm_recaptcha_secret_key', wp_unslash( $_POST['osm_recaptcha_secret_key'] ?? '' ) );
+        $this->update_secret_option( 'osm_turnstile_secret_key', wp_unslash( $_POST['osm_turnstile_secret_key'] ?? '' ) );
+
+        // Confirmation email (default on). Checkboxes are stored as '1' / '0' so "off" sticks.
+        update_option( 'osm_wl_email_enabled', isset( $_POST['osm_wl_email_enabled'] ) ? '1' : '0' );
+        update_option( 'osm_wl_email_parent2', isset( $_POST['osm_wl_email_parent2'] ) ? '1' : '0' );
+        $this->update_visible_option( 'osm_wl_group_name', wp_unslash( $_POST['osm_wl_group_name'] ?? '' ) );
+        $this->update_visible_option( 'osm_wl_email_from_name', wp_unslash( $_POST['osm_wl_email_from_name'] ?? '' ) );
+
+        $notices = [];
+        $reply_to = sanitize_email( wp_unslash( $_POST['osm_wl_email_reply_to'] ?? '' ) );
+        $reply_raw = trim( (string) wp_unslash( $_POST['osm_wl_email_reply_to'] ?? '' ) );
+        if ( $reply_raw === '' ) {
+            delete_option( 'osm_wl_email_reply_to' );
+        } elseif ( $reply_to !== '' && is_email( $reply_to ) ) {
+            update_option( 'osm_wl_email_reply_to', $reply_to );
+        } else {
+            $notices[] = 'The reply-to address was not valid, so it was not saved.';
+        }
+
+        // Saving the default text unchanged stores nothing, so future default improvements still apply.
+        $subject = sanitize_text_field( wp_unslash( $_POST['osm_wl_email_subject'] ?? '' ) );
+        if ( $subject === '' || $subject === OSM_Waiting_List_Email::default_subject() ) {
+            delete_option( 'osm_wl_email_subject' );
+        } else {
+            update_option( 'osm_wl_email_subject', $subject );
+        }
+        $body = sanitize_textarea_field( wp_unslash( $_POST['osm_wl_email_body'] ?? '' ) );
+        $body = str_replace( [ "\r\n", "\r" ], "\n", $body );
+        if ( trim( $body ) === '' || trim( $body ) === trim( OSM_Waiting_List_Email::default_body() ) ) {
+            delete_option( 'osm_wl_email_body' );
+        } else {
+            update_option( 'osm_wl_email_body', $body );
+        }
+
+        // Address lookup.
+        $lookup = sanitize_text_field( wp_unslash( $_POST['osm_wl_address_lookup'] ?? 'off' ) );
+        if ( ! in_array( $lookup, OSM_Waiting_List::ADDRESS_LOOKUP_MODES, true ) ) {
+            $lookup = 'off';
+        }
+        update_option( 'osm_wl_address_lookup', $lookup );
+        $this->update_visible_option( 'osm_google_maps_api_key', wp_unslash( $_POST['osm_google_maps_api_key'] ?? '' ) );
+        update_option( 'osm_wl_postcode_server_check', isset( $_POST['osm_wl_postcode_server_check'] ) ? '1' : '0' );
+        if ( $lookup === 'google' && trim( (string) get_option( 'osm_google_maps_api_key', '' ) ) === '' ) {
+            $notices[] = 'Google address lookup needs a Google Maps JavaScript API key. Until one is saved the form uses manual address entry.';
+        }
+
+        $message = 'Waiting list / OSM Helper settings saved.';
+        if ( ! empty( $notices ) ) {
+            $message .= ' ' . implode( ' ', $notices );
+        }
+        set_transient( 'osm_admin_notice', [ 'type' => empty( $notices ) ? 'success' : 'error', 'message' => $message ], 10 );
+
+        wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ) );
+        exit;
+    }
+
     public function display_admin_notices() {
         if ( $notice = get_transient( 'osm_admin_notice' ) ) {
             $class = $notice['type'] === 'success' ? 'notice-success' : 'notice-error';
             printf( '<div class="notice %s is-dismissible"><p>%s</p></div>', esc_attr( $class ), esc_html( $notice['message'] ) );
             delete_transient( 'osm_admin_notice' );
         }
+
+        if ( OSM_API::blocked_flag_is_set( get_option( OSM_API::OPTION_BLOCKED ) ) ) {
+            echo '<div class="notice notice-error"><p><strong>Legacy OSM API block (X-Blocked).</strong> Programme/events requests are stopped. Waiting-list forms use OSM Helper — clear intake blocks there under Settings.</p></div>';
+        }
+
+        $deprecated = get_option( OSM_API::OPTION_DEPRECATED );
+        if ( is_array( $deprecated ) && ! empty( $deprecated['date'] ) ) {
+            $path = isset( $deprecated['path'] ) ? (string) $deprecated['path'] : '';
+            echo '<div class="notice notice-warning"><p><strong>OSM X-Deprecated:</strong> ' . esc_html( (string) $deprecated['date'] );
+            if ( $path !== '' ) {
+                echo ' for <code>' . esc_html( $path ) . '</code>';
+            }
+            echo '. Do not keep calling an endpoint after its removal date.</p></div>';
+        }
+    }
+
+    /**
+     * @param string $nonce_action Nonce action.
+     * @return void
+     */
+    private function require_admin( $nonce_action ) {
+        check_admin_referer( $nonce_action );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html( 'You do not have permission to manage OSM settings.' ) );
+        }
+    }
+
+    /**
+     * Blank text clears a non-secret setting (site keys are shown in the form).
+     *
+     * @param string $option Option name.
+     * @param string $value  Posted value.
+     * @return void
+     */
+    private function update_visible_option( $option, $value ) {
+        $value = sanitize_text_field( (string) $value );
+        if ( $value === '' ) {
+            delete_option( $option );
+            return;
+        }
+        update_option( $option, $value );
+    }
+
+    /**
+     * Blank password keeps the stored secret.
+     *
+     * @param string $option Option name.
+     * @param string $value  Posted value.
+     * @return void
+     */
+    private function update_secret_option( $option, $value ) {
+        $value = sanitize_text_field( (string) $value );
+        if ( $value === '' ) {
+            return;
+        }
+        update_option( $option, $value, false );
     }
 }

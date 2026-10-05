@@ -9,6 +9,7 @@ class OSM_Shortcodes {
     public function __construct() {
         add_shortcode( 'osm_programme', [ $this, 'render_programme' ] );
         add_shortcode( 'osm_events', [ $this, 'render_events' ] );
+        add_shortcode( 'osm_waiting_list', [ $this, 'render_waiting_list' ] );
     }
 
     /**
@@ -144,5 +145,127 @@ class OSM_Shortcodes {
             include OSM_TEMPLATES_DIR . '/shortcode/error.php';
             return ob_get_clean();
         }
+    }
+
+    /**
+     * Render the public waiting-list form shortcode.
+     *
+     * Usage: [osm_waiting_list]
+     *
+     * OSM Helper base URL and site key are configured in OSM Settings
+     * (Waiting List tab). Submissions are written straight into OSM and
+     * are not stored in WordPress when OSM accepts them.
+     *
+     * @param array $atts Shortcode attributes (unused).
+     * @return string Shortcode output
+     */
+    public function render_waiting_list( $atts = [] ) {
+        $result = null;
+        $values = [];
+        $errors = [];
+
+        if ( isset( $_SERVER['REQUEST_METHOD'] ) && $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['osm_waiting_list_submit'] ) ) {
+            $result = OSM_Waiting_List::handle_submission( wp_unslash( $_POST ) );
+            $values = $result['values'] ?? [];
+            $errors = $result['errors'] ?? [];
+        }
+
+        $section_configured = OSM_Helper_Client::is_configured();
+        $captcha_mode = OSM_Waiting_List::captcha_mode();
+        $captcha_site_key = '';
+
+        if ( $captcha_mode === 'recaptcha' ) {
+            $captcha_site_key = (string) get_option( 'osm_recaptcha_site_key', '' );
+            if ( $captcha_site_key !== '' ) {
+                wp_enqueue_script(
+                    'osm-recaptcha',
+                    'https://www.google.com/recaptcha/api.js',
+                    [],
+                    null,
+                    [
+                        'in_footer' => true,
+                        'strategy'  => 'defer',
+                    ]
+                );
+            }
+        } elseif ( $captcha_mode === 'turnstile' ) {
+            $captcha_site_key = (string) get_option( 'osm_turnstile_site_key', '' );
+            if ( $captcha_site_key !== '' ) {
+                wp_enqueue_script(
+                    'osm-turnstile',
+                    'https://challenges.cloudflare.com/turnstile/v0/api.js',
+                    [],
+                    null,
+                    [
+                        'in_footer' => true,
+                        'strategy'  => 'defer',
+                    ]
+                );
+            }
+        }
+
+        $address_lookup = self::enqueue_address_lookup( $section_configured && empty( $result['success'] ) );
+
+        ob_start();
+        include OSM_TEMPLATES_DIR . '/shortcode/waiting-list.php';
+        return ob_get_clean();
+    }
+
+    /**
+     * Load the address lookup script only where the waiting-list shortcode renders a form.
+     * Independent of captcha mode (off, reCAPTCHA, Turnstile).
+     *
+     * @param bool $form_shown Whether the form is on the page.
+     * @return string Effective mode: off, google, or postcodes_io.
+     */
+    private static function enqueue_address_lookup( $form_shown ) {
+        $mode = OSM_Waiting_List::address_lookup_mode();
+        $google_key = trim( (string) get_option( 'osm_google_maps_api_key', '' ) );
+        if ( $mode === 'google' && $google_key === '' ) {
+            $mode = 'off'; // No key: plain manual entry.
+        }
+        if ( ! $form_shown || $mode === 'off' ) {
+            return 'off';
+        }
+
+        wp_enqueue_script(
+            'osm-waiting-list',
+            OSM_ASSETS_URI . '/js/waiting-list.js',
+            [],
+            file_exists( OSM_PLUGIN_DIR . 'assets/js/waiting-list.js' ) ? '1.1.0-' . filemtime( OSM_PLUGIN_DIR . 'assets/js/waiting-list.js' ) : '1.1.0',
+            [ 'in_footer' => true ]
+        );
+        wp_localize_script(
+            'osm-waiting-list',
+            'osmWaitingListConfig',
+            [
+                'mode'         => $mode,
+                'postcodesApi' => OSM_Waiting_List::POSTCODES_IO_BASE,
+                'i18n'         => [
+                    'checking' => 'Checking postcode…',
+                    'found'    => 'Postcode found.',
+                    'notFound' => 'We could not find that postcode. Please check it.',
+                    'invalid'  => 'That does not look like a UK postcode.',
+                ],
+            ]
+        );
+
+        if ( $mode === 'google' ) {
+            // Printed after waiting-list.js so the callback exists when Google calls it.
+            $src = add_query_arg(
+                [
+                    'key'       => rawurlencode( $google_key ),
+                    'libraries' => 'places',
+                    'loading'   => 'async',
+                    'callback'  => 'osmWlGoogleReady',
+                    'region'    => 'GB',
+                    'language'  => 'en-GB',
+                    'v'         => 'weekly',
+                ],
+                'https://maps.googleapis.com/maps/api/js'
+            );
+            wp_enqueue_script( 'osm-google-places', $src, [ 'osm-waiting-list' ], null, [ 'in_footer' => true ] );
+        }
+        return $mode;
     }
 }

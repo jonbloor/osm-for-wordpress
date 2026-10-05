@@ -45,3 +45,232 @@
     font-size: 18px;
     font-weight: 600;
 }
+/* Waiting list form */
+.osm-waiting-list {
+    max-width: 40rem;
+}
+
+.osm-wl-notice {
+    padding: 12px 16px;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    border: 1px solid #e7e7e7;
+}
+
+.osm-wl-notice--success {
+    background: #f0faf0;
+    border-color: #b7e0b7;
+}
+
+.osm-wl-notice--error {
+    background: #fdf2f2;
+    border-color: #e0b7b7;
+}
+
+.osm-wl-fieldset {
+    border: 1px solid #e7e7e7;
+    border-radius: 5px;
+    padding: 1rem 1.25rem 1.25rem;
+    margin: 0 0 1.25rem;
+}
+
+.osm-wl-fieldset legend {
+    font-weight: 600;
+    padding: 0 0.35rem;
+}
+
+.osm-wl-field {
+    margin-bottom: 0.9rem;
+}
+
+.osm-wl-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.osm-wl-field input[type="text"],
+.osm-wl-field input[type="email"],
+.osm-wl-field input[type="tel"],
+.osm-wl-field textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.osm-wl-field--error input,
+.osm-wl-field--error textarea {
+    border-color: #b00020;
+}
+
+.osm-wl-error {
+    color: #b00020;
+    margin: 0.35rem 0 0;
+    font-size: 0.9em;
+}
+
+.osm-wl-hint {
+    margin: 0.25rem 0 0.75rem;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.osm-wl-required,
+.osm-wl-optional {
+    font-weight: 400;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.osm-wl-consent {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-weight: 400;
+}
+
+.osm-wl-consent input {
+    margin-top: 0.25rem;
+}
+
+.osm-wl-submit {
+    display: inline-block;
+    padding: 0.65rem 1.25rem;
+    border: none;
+    border-radius: 4px;
+    background: #007bff;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.osm-wl-submit:hover,
+.osm-wl-submit:focus {
+    background: #0069d9;
+}
+
+.osm-wl-hp {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.osm-wl-captcha {
+    margin: 0 0 1rem;
+}
+
+.osm-wl-field textarea {
+    resize: vertical;
+    min-height: 6rem;
+    font: inherit;
+}
+
+.osm-wl-label {
+    display: block;
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+}
+
+/*
+ * Keep the waiting-list form light even when the visitor's device is in dark mode.
+ * Google's address widget (<gmp-place-autocomplete>) defaults to
+ * "color-scheme: light dark", so on a dark-mode phone or PC it drew a dark box and
+ * dark suggestion list. Force light and match our own inputs.
+ */
+.osm-wl-form {
+    color-scheme: light;
+}
+
+.osm-wl-field input[type="text"],
+.osm-wl-field input[type="email"],
+.osm-wl-field input[type="tel"],
+.osm-wl-field textarea {
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
+.osm-wl-address-search gmp-place-autocomplete,
+.osm-wl-address-search gmp-basic-place-autocomplete {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    color-scheme: light;
+    background-color: #fff;
+    color: #1e1e1e;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font: inherit;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(input),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(input) {
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-list),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-list) {
+    background-color: #fff;
+    color: #1e1e1e;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item) {
+    background-color: #fff;
+    color: #555;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item-main-text),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item-main-text) {
+    color: #1e1e1e;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item-selected),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item-selected) {
+    background-color: #eef4ff;
+}
+
+/* Older Google widget: its suggestion list is added at the end of the page. */
+.pac-container {
+    color-scheme: light;
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
+.pac-container .pac-item,
+.pac-container .pac-item-query {
+    color: #1e1e1e;
+}
+
+.pac-container .pac-item:hover,
+.pac-container .pac-item-selected {
+    background-color: #eef4ff;
+}
+
+.osm-wl-lookup-status {
+    margin: 0.35rem 0 0;
+    font-size: 0.9em;
+    min-height: 1.2em;
+}
+
+.osm-wl-lookup-status--info {
+    color: #555;
+}
+
+.osm-wl-lookup-status--ok {
+    color: #1b6e2d;
+}
+
+.osm-wl-lookup-status--error {
+    color: #b00020;
+}

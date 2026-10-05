@@ -9,53 +9,57 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 ## Features
 
 - Display section programmes and events using shortcodes.
-- Manage sections, authentication, and cache directly from the WordPress admin.
+- Public waiting-list form shortcode that passes validated submissions to [OSM Helper](https://osmhelper.co.uk), which writes into your OSM waiting-list section using the leader’s existing OSM Helper login.
+- Manage sections, OSM Helper site key, captcha, and cache from the WordPress admin. No OSM client ID or Connect with OSM in WordPress.
 - Dynamically retrieve and cache data from OSM for optimal performance.
 
 ---
 
 ## Installation
 
-1. Download the latest release of the plugin from [here](https://github.com/alantiller/osm-for-wordpress/releases)
+1. Download the plugin zip. For the OSM Helper waiting-list form, sign in to OSM Helper and use **Download plugin** on [Members → Joining form](https://osmhelper.co.uk/wordpress-form/). (Upstream releases without the waiting-list form are [here](https://github.com/alantiller/osm-for-wordpress/releases).)
 2. Log in to your WordPress admin dashboard.
 3. Navigate to **Plugins > Add New > Upload Plugin**.
 4. Select the zip file and click **Install Now**.
 5. Activate the plugin.
 
+To update, upload the new zip the same way and choose **Replace current with uploaded**. Settings are kept.
+
 ---
 
 ## Setup
 
-### Step 1: Generate Your Client ID and Secret
+### Waiting list (OSM Helper — recommended path)
 
-To authenticate with the OSM API, you'll need a **Client ID** and **Client Secret**. Follow these steps to generate them:
+Parents never log in to OSM. The one-time OSM approval lives in OSM Helper (`https://osmhelper.co.uk/callback`). WordPress only needs:
 
-1. Log in to [Online Scout Manager (OSM)](https://www.onlinescoutmanager.co.uk).
-2. Expand the **Settings** menu at the bottom of the page.
-3. Select **My Account Details**.
-4. Click **Developer Tools** from the menu on the left-hand side.
-5. Click **Create Application**.
-6. Provide a name for your application and click **Save**.
-7. The **Client ID** and **Client Secret** will be displayed **once only**. Make sure to copy and save them securely.
+1. **OSM Helper base URL** (default `https://osmhelper.co.uk`)
+2. A **site key** the leader copies from OSM Helper after signing in
 
-### Step 2: Authenticate with OSM
+In OSM Helper:
 
-1. Go to **OSM Settings** in the WordPress admin menu.
-2. Click on the **Authentication** tab.
-3. Enter your **Client ID** and **Client Secret**.
-4. Click **Save & Authenticate** to validate your credentials.
+1. Sign in at [osmhelper.co.uk](https://osmhelper.co.uk).
+2. Open **Members → Joining form** ([osmhelper.co.uk/wordpress-form/](https://osmhelper.co.uk/wordpress-form/)). That page has the latest plugin download (version and build shown), step-by-step setup, the Notes field status and troubleshooting.
+3. Choose your OSM waiting-list section (do not hardcode another group’s section id).
+4. Select **Save** to create a site key, then copy it. **Save and make a new site key** replaces it; **Turn off the form** removes it.
 
-### Step 3: Enable Sections
+In WordPress:
 
-1. Navigate to the **Sections Enabled** tab.
-2. Select the sections you want to enable by ticking the checkboxes.
-3. Click **Save Sections**. The plugin will automatically fetch and cache the current term for each enabled section.
+1. Go to **OSM Settings → Waiting List**.
+2. Confirm the base URL (https).
+3. Paste the site key (leave blank later to keep it).
+4. Optionally enable Google reCAPTCHA or Cloudflare Turnstile.
+5. Publish `[osm_waiting_list]` on a page.
 
-### Step 4: Verify Configuration
+The plugin validates, applies honeypot and per-IP rate limit, verifies captcha (if enabled), then `POST`s JSON to `OSM Helper /api/waiting-list/submit`. It does **not** store a successful submission in WordPress. Groups do **not** create an OSM application for this plugin.
 
-1. Go to the **General** tab.
-2. Verify that your enabled sections are listed along with their current term IDs.
-3. If needed, use the **Purge Cache** or **Reset Configuration** options.
+### Programme / events (legacy)
+
+Programme and events shortcodes may still use a previously stored OSM token if one exists. This plugin no longer offers Connect with OSM, client ID, or client secret fields. Waiting-list forms do not use that path.
+
+### Blocks, invalid data, and rate limits
+
+Waiting-list writes go through OSM Helper, which honours `X-Blocked` (stop), surfaces `X-Deprecated`, and does not retry HTTP 429. Clear a Helper intake block on the OSM Helper [Joining form page](https://osmhelper.co.uk/wordpress-form/) after fixing the cause.
 
 ---
 
@@ -97,6 +101,75 @@ Example:
 
 ---
 
+
+#### Waiting List Shortcode
+
+```plaintext
+[osm_waiting_list]
+```
+
+Shows a public form for joining an OSM waiting list via OSM Helper. Configure **OSM Helper base URL** and **site key** under **OSM Settings → Waiting List**. The waiting-list **section ID** is chosen in OSM Helper on the [Joining form page](https://osmhelper.co.uk/wordpress-form/) (not in WordPress).
+
+**Required fields:** child first name, last name, date of birth (UK day/month/year); home address line 1 and postcode; parent 1 first name, last name, email, phone; consent checkbox.
+
+**Home address order:** Address line 1 (required), Address line 2, Town, County, Postcode (required, last). It is written to the child's own details in OSM (customdata group 6) as `address1`, `address2`, `address3` (town), `address4` (county) and `postcode`.
+
+**Receive text messages from Leaders?** One optional checkbox per parent. Ticked sets OSM's “receive SMS” flag for that parent's phone (`data[phone1_sms]=yes` on Primary Contact 1 or 2). Unticked leaves it unset, which OSM shows as no. Parent 2's box needs a parent 2 phone number.
+
+**Optional fields:** address line 2, town, county; receive-texts checkboxes; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required); a parent note (“Anything else we should know?”, up to 1000 characters).
+
+On a successful write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
+
+Optional spam protection (per site, checked on the server before calling OSM Helper):
+
+- **Off** — honeypot and rate limit only. No captcha token is required.
+- **Google reCAPTCHA** (v2 checkbox) — site key and secret key from the [Google reCAPTCHA admin](https://www.google.com/recaptcha/admin).
+- **Cloudflare Turnstile** — site key and secret key from the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
+
+Setting keys: `osm_helper_base_url`, `osm_helper_site_key`, `osm_waiting_list_captcha` (`off`, `recaptcha`, or `turnstile`), plus captcha site/secret keys. A blank secret field does not wipe a stored secret. Failed verification shows a form error and does not call OSM Helper.
+
+##### Parent note
+
+The optional note is plain text: tags and control characters are stripped in WordPress and again in OSM Helper, and it is limited to 1000 characters. OSM Helper writes it to the waiting list’s **Notes** custom field in OSM, the field leaders choose in OSM Helper under **Waiting list → Rank & notes settings** (OSM “Customisable data”, group 5). It uses the same history format as the Rank & notes screen:
+
+```plaintext
+05/10/26 10:30 - Parent (website form) - "Sibling already in Beavers"
+```
+
+The note is written after the child and parent contacts. If no Notes field is chosen in OSM Helper, or OSM refuses the note, **the child is still added**. OSM Helper replies `ok: true` with `partial: true` and a `note_status` of `skipped` or `failed`. WordPress logs it (no personal details) and asks the parent to send the note another way.
+
+##### Confirmation email
+
+After OSM Helper confirms the child is on the list, WordPress sends a plain-text receipt with `wp_mail` to parent 1, and by default to parent 2 if they gave an email. Each parent gets a separate email. It is **never** sent when the OSM write failed, and nothing is stored in WordPress. If emails do not arrive, use an SMTP plugin.
+
+Settings (Waiting List tab): send confirmation (default **on**), also email parent 2 (default on), group name, From name, optional reply-to address, subject and message. Clear the subject or message to go back to the UK English default.
+
+Placeholders: `{parent_first_name}` (the parent receiving it), `{child_first_name}`, `{child_last_name}`, `{group_name}`, `{site_name}`, `{site_url}`, `{submitted_date}`, `{parent_note}`, `{receive_texts}` (Yes/No for the parent receiving it).
+
+Setting keys: `osm_wl_email_enabled`, `osm_wl_email_parent2` (`1`/`0`), `osm_wl_group_name`, `osm_wl_email_from_name`, `osm_wl_email_reply_to`, `osm_wl_email_subject`, `osm_wl_email_body`.
+
+##### Address lookup
+
+Choose one under **OSM Settings → Waiting List → Address lookup**. Its script loads only on pages that show the `[osm_waiting_list]` form. Manual entry always still works, and it works with captcha off, reCAPTCHA or Turnstile.
+
+- **Off** (default): parents type the address.
+- **Google Places autocomplete**: parents start typing and pick an address; results are limited to the UK, and address line 1, line 2, town, county and postcode are filled in. You need a Google Maps JavaScript API key with **Places API (New)** enabled (a key that only has the legacy Places API falls back to Google’s older widget). Google requires **billing enabled** on the Cloud project, but there is a **monthly free allowance**, which normally covers a group waiting list. Set a budget alert to be sure. Restrict the key to your site’s address (HTTP referrer) and to those APIs. The key is public: it is included in the page. Without a key the form falls back to manual entry.
+- **postcodes.io postcode check**: **free and open data**, with no key or account. When the parent leaves the postcode box, the browser calls `https://api.postcodes.io/postcodes/{postcode}`, shows whether the postcode exists, tidies its format, and fills the town and county if they are empty. The town is the parish, or the local authority (`admin_district`) when there is no parish. The county is `admin_county`, which is left blank where postcodes.io has none (unitary authorities, London, Scotland, Wales, Northern Ireland). It **cannot list house addresses**, so parents still type address line 1. You can also tick the optional **server-side check**: when the form is sent, WordPress calls `https://api.postcodes.io/postcodes/{postcode}/validate` with a 3-second timeout. Only a definite “not a postcode” blocks the form. Errors and timeouts let it through (fails open).
+
+Setting keys: `osm_wl_address_lookup` (`off`, `google`, `postcodes_io`), `osm_google_maps_api_key`, `osm_wl_postcode_server_check` (`1`/`0`).
+
+##### Offline tests
+
+No WordPress, network or OSM access needed:
+
+```bash
+php src/tests/waiting-list-validation-test.php
+php src/tests/waiting-list-flow-test.php
+node src/tests/waiting-list-js-test.js
+```
+
+---
+
 ## Admin Features
 
 - **General Tab**:
@@ -108,12 +181,16 @@ Example:
   - List all available sections retrieved from OSM.
   - Enable or disable specific sections.
 
-- **Authentication Tab**:
-  - Enter and manage your OSM **Client ID** and **Client Secret**.
-
 - **Advanced Options**:
   - **Date Format**: Customize the date format used in the plugin. Default: `d/m/Y`.
   - **Time Format**: Customize the time format used in the plugin. Default: `H:i`.
+
+- **Waiting List**:
+  - OSM Helper base URL (default `https://osmhelper.co.uk`) and site key from the OSM Helper [Joining form page](https://osmhelper.co.uk/wordpress-form/).
+  - Waiting-list section ID is configured in OSM Helper, not here.
+  - Choose spam protection: off, Google reCAPTCHA, or Cloudflare Turnstile. Keys are per site.
+  - Confirmation email to parents: on or off, parent 2 copy, group name, From name, reply-to, subject and message with placeholders.
+  - Address lookup: off, Google Places autocomplete (API key), or postcodes.io postcode check (optional server-side check).
 
 ---
 
