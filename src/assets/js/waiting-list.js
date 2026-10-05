@@ -188,6 +188,14 @@
             try {
                 var el = new places.PlaceAutocompleteElement({ includedRegionCodes: ['gb'] });
                 el.setAttribute('aria-labelledby', 'osm_wl_address_search_label');
+                // Google's widget follows the device's dark mode by default
+                // (color-scheme: light dark). Keep it light to match the form,
+                // even if the stylesheet is overridden or cached.
+                if (el.style) {
+                    el.style.colorScheme = 'light';
+                    el.style.backgroundColor = '#fff';
+                    el.style.color = '#1e1e1e';
+                }
                 var onPlace = function (place) {
                     if (!place || typeof place.fetchFields !== 'function') return;
                     place.fetchFields({ fields: ['addressComponents'] }).then(function () {

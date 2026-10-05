@@ -177,11 +177,84 @@
     font-weight: 600;
 }
 
+/*
+ * Keep the waiting-list form light even when the visitor's device is in dark mode.
+ * Google's address widget (<gmp-place-autocomplete>) defaults to
+ * "color-scheme: light dark", so on a dark-mode phone or PC it drew a dark box and
+ * dark suggestion list. Force light and match our own inputs.
+ */
+.osm-wl-form {
+    color-scheme: light;
+}
+
+.osm-wl-field input[type="text"],
+.osm-wl-field input[type="email"],
+.osm-wl-field input[type="tel"],
+.osm-wl-field textarea {
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
 .osm-wl-address-search gmp-place-autocomplete,
 .osm-wl-address-search gmp-basic-place-autocomplete {
     display: block;
     width: 100%;
-    max-width: 32rem;
+    max-width: 100%;
+    box-sizing: border-box;
+    color-scheme: light;
+    background-color: #fff;
+    color: #1e1e1e;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font: inherit;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(input),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(input) {
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-list),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-list) {
+    background-color: #fff;
+    color: #1e1e1e;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item) {
+    background-color: #fff;
+    color: #555;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item-main-text),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item-main-text) {
+    color: #1e1e1e;
+}
+
+.osm-wl-address-search gmp-place-autocomplete::part(prediction-item-selected),
+.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-item-selected) {
+    background-color: #eef4ff;
+}
+
+/* Older Google widget: its suggestion list is added at the end of the page. */
+.pac-container {
+    color-scheme: light;
+    background-color: #fff;
+    color: #1e1e1e;
+}
+
+.pac-container .pac-item,
+.pac-container .pac-item-query {
+    color: #1e1e1e;
+}
+
+.pac-container .pac-item:hover,
+.pac-container .pac-item-selected {
+    background-color: #eef4ff;
 }
 
 .osm-wl-lookup-status {

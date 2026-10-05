@@ -22,6 +22,7 @@ $GLOBALS['fake_captcha']  = [ 'success' => true ];
 
 define( 'ABSPATH', __DIR__ );
 define( 'OSM_ASSETS_URI', 'https://example.org/wp-content/plugins/osm-for-wordpress/assets' );
+define( 'OSM_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 
 function get_option( $name, $default = false ) {
     return array_key_exists( $name, $GLOBALS['wp_options'] ) ? $GLOBALS['wp_options'][ $name ] : $default;

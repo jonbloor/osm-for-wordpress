@@ -232,7 +232,7 @@ class OSM_Shortcodes {
             'osm-waiting-list',
             OSM_ASSETS_URI . '/js/waiting-list.js',
             [],
-            '1.1.0',
+            file_exists( OSM_PLUGIN_DIR . 'assets/js/waiting-list.js' ) ? '1.1.0-' . filemtime( OSM_PLUGIN_DIR . 'assets/js/waiting-list.js' ) : '1.1.0',
             [ 'in_footer' => true ]
         );
         wp_localize_script(

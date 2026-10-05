@@ -60,7 +60,10 @@ class OSM_For_WordPress {
     }
 
     public function enqueue_frontend_assets() {
-        wp_enqueue_style( 'osm-frontend-style', OSM_ASSETS_URI . '/css/frontend.css' );
+        // Version by file time so browsers pick up style changes after an update.
+        $css_file = OSM_PLUGIN_DIR . 'assets/css/frontend.css';
+        $css_ver  = file_exists( $css_file ) ? (string) filemtime( $css_file ) : null;
+        wp_enqueue_style( 'osm-frontend-style', OSM_ASSETS_URI . '/css/frontend.css', [], $css_ver );
         wp_enqueue_script( 'osm-frontend-script', OSM_ASSETS_URI . '/js/frontend.js', [ 'jquery' ], null, true );
     }
 

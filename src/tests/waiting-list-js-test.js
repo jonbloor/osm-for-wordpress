@@ -18,7 +18,7 @@ function makeEl(id, value) {
     const listeners = {};
     const attrs = {};
     return {
-        id, value: value || '', textContent: '', className: '', hidden: true, children: [],
+        id, value: value || '', textContent: '', className: '', hidden: true, children: [], style: {},
         addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
         fire(type, ev) { (listeners[type] || []).forEach((fn) => fn(ev || {})); },
         setAttribute(k, v) { attrs[k] = String(v); },
@@ -113,6 +113,7 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     t.ctx.window.osmWlGoogleReady();
     check(created && created.opts.includedRegionCodes[0] === 'gb', 'Places widget restricted to the UK');
     check(t.els.osm_wl_address_search.hidden === false && t.els.osm_wl_address_search.children.length === 1, 'search box shown');
+    check(created.style.colorScheme === 'light' && created.style.backgroundColor === '#fff', 'Places widget forced to light colour scheme (ignores device dark mode)');
     const place = {
         addressComponents: [
             { types: ['street_number'], longText: '12', shortText: '12' },
@@ -162,6 +163,15 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     t.els.osm_wl_child_postcode.fire('blur');
     await tick();
     check(t.fetchLog.length === 0, 'mode off → no lookups');
+
+    // Stylesheet: light colour scheme for the form and both Google widgets, no dark colours.
+    const css = fs.readFileSync(path.join(__dirname, '..', 'assets', 'css', 'frontend.css'), 'utf8');
+    const block = (sel) => { const i = css.indexOf(sel + ' {'); return i < 0 ? '' : css.slice(i, css.indexOf('}', i)); };
+    check(/color-scheme:\s*light;/.test(block('.osm-wl-form')), 'CSS: form uses color-scheme light');
+    check(/color-scheme:\s*light;/.test(block('.osm-wl-address-search gmp-basic-place-autocomplete')), 'CSS: Places widget uses color-scheme light');
+    check(/background-color:\s*#fff/.test(block('.osm-wl-address-search gmp-basic-place-autocomplete::part(prediction-list)')), 'CSS: suggestion list is white');
+    check(/color-scheme:\s*light;/.test(block('.pac-container')), 'CSS: legacy suggestion list is light');
+    check(!/prefers-color-scheme:\s*dark/.test(css) && !/color-scheme:\s*dark/.test(css), 'CSS: no dark-mode rules');
 
     if (failures) { console.log(`\n${failures} failure(s)`); process.exit(1); }
     console.log('\nAll JS tests passed.');
