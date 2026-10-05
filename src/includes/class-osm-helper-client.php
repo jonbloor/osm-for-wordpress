@@ -55,7 +55,7 @@ class OSM_Helper_Client {
      * Does not store the payload in WordPress.
      *
      * @param array $payload From OSM_Waiting_List::build_osm_payload().
-     * @return array{scoutid: int}
+     * @return array{scoutid: int, partial: bool, note_status: string, warnings: string[]}
      * @throws Exception
      */
     public static function submit_waiting_list( array $payload ) {
@@ -107,7 +107,33 @@ class OSM_Helper_Client {
             throw new Exception( $err );
         }
 
-        $scoutid = isset( $data['scoutid'] ) ? (int) $data['scoutid'] : 0;
-        return [ 'scoutid' => $scoutid ];
+        return self::parse_success( $data );
+    }
+
+    /**
+     * Normalise OSM Helper's success JSON. Older Helper versions only send ok + scoutid.
+     *
+     * @param array $data Decoded JSON with ok = true.
+     * @return array{scoutid: int, partial: bool, note_status: string, warnings: string[]}
+     */
+    public static function parse_success( array $data ) {
+        $note_status = isset( $data['note_status'] ) && is_string( $data['note_status'] ) ? $data['note_status'] : 'none';
+        if ( ! in_array( $note_status, [ 'none', 'written', 'skipped', 'failed' ], true ) ) {
+            $note_status = 'none';
+        }
+        $warnings = [];
+        if ( isset( $data['warnings'] ) && is_array( $data['warnings'] ) ) {
+            foreach ( $data['warnings'] as $warning ) {
+                if ( is_string( $warning ) && $warning !== '' ) {
+                    $warnings[] = $warning;
+                }
+            }
+        }
+        return [
+            'scoutid'     => isset( $data['scoutid'] ) ? (int) $data['scoutid'] : 0,
+            'partial'     => ! empty( $data['partial'] ) || in_array( $note_status, [ 'skipped', 'failed' ], true ),
+            'note_status' => $note_status,
+            'warnings'    => $warnings,
+        ];
     }
 }

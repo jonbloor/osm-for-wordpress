@@ -9,6 +9,10 @@ class OSM_Waiting_List {
     const RATE_LIMIT_MAX = 5;
     const RATE_LIMIT_WINDOW = 3600; // 1 hour
     const HONEYPOT_FIELD = 'osm_wl_website';
+    const PARENT_NOTE_MAX = 1000;
+    const ADDRESS_LOOKUP_MODES = [ 'off', 'google', 'postcodes_io' ];
+    const POSTCODES_IO_BASE = 'https://api.postcodes.io/postcodes/';
+    const POSTCODES_IO_TIMEOUT = 3;
 
     /**
      * Validate submitted waiting-list fields.
@@ -52,6 +56,11 @@ class OSM_Waiting_List {
 
         if ( empty( $errors['parent1_phone'] ) && ! self::is_valid_phone( $input['parent1_phone'] ?? '' ) ) {
             $errors['parent1_phone'] = 'Please enter a valid phone number for parent 1.';
+        }
+
+        $note = (string) ( $input['parent_note'] ?? '' );
+        if ( self::text_length( $note ) > self::PARENT_NOTE_MAX ) {
+            $errors['parent_note'] = 'Please keep the note to ' . self::PARENT_NOTE_MAX . ' characters or fewer.';
         }
 
         $consent = $input['consent'] ?? '';
@@ -174,12 +183,164 @@ class OSM_Waiting_List {
             }
         }
 
-        return [
+        $payload = [
             'member'         => $member,
             'member_details' => $member_details,
             'contact1'       => $contact1,
             'contact2'       => $contact2,
         ];
+
+        // Optional free-text note. OSM Helper writes it to the waiting list's mapped Notes field;
+        // if that fails the child is still added and Helper reports a partial success.
+        $note = self::clean_note( $input['parent_note'] ?? '' );
+        if ( $note !== '' ) {
+            $payload['parent_note'] = $note;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Plain-text parent note: tags and control characters removed, line breaks kept, trimmed,
+     * capped at PARENT_NOTE_MAX characters.
+     *
+     * @param mixed $raw Raw or sanitised note.
+     * @param bool  $cap Cut to PARENT_NOTE_MAX (false when validating, so the visitor is told instead).
+     * @return string
+     */
+    public static function clean_note( $raw, $cap = true ) {
+        if ( ! is_string( $raw ) ) {
+            return '';
+        }
+        $note = str_replace( [ "\r\n", "\r" ], "\n", $raw );
+        $note = strip_tags( $note );
+        $note = (string) preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $note );
+        $note = trim( $note );
+        if ( $cap && self::text_length( $note ) > self::PARENT_NOTE_MAX ) {
+            $note = function_exists( 'mb_substr' ) ? mb_substr( $note, 0, self::PARENT_NOTE_MAX, 'UTF-8' ) : substr( $note, 0, self::PARENT_NOTE_MAX );
+            $note = rtrim( $note );
+        }
+        return $note;
+    }
+
+    /**
+     * Configured address lookup: off (default), google, or postcodes_io.
+     *
+     * @return string
+     */
+    public static function address_lookup_mode() {
+        if ( ! function_exists( 'get_option' ) ) {
+            return 'off';
+        }
+        $mode = get_option( 'osm_wl_address_lookup', 'off' );
+        return in_array( $mode, self::ADDRESS_LOOKUP_MODES, true ) ? $mode : 'off';
+    }
+
+    /**
+     * Upper-case a UK postcode and put a single space before the inward code.
+     *
+     * @param string $postcode Raw postcode.
+     * @return string
+     */
+    public static function normalise_postcode( $postcode ) {
+        $compact = strtoupper( (string) preg_replace( '/\s+/', '', (string) $postcode ) );
+        if ( strlen( $compact ) > 3 ) {
+            return substr( $compact, 0, -3 ) . ' ' . substr( $compact, -3 );
+        }
+        return $compact;
+    }
+
+    /**
+     * postcodes.io validate URL for a postcode.
+     *
+     * @param string $postcode Postcode.
+     * @return string
+     */
+    public static function postcodes_io_validate_url( $postcode ) {
+        $compact = strtoupper( (string) preg_replace( '/\s+/', '', (string) $postcode ) );
+        return self::POSTCODES_IO_BASE . rawurlencode( $compact ) . '/validate';
+    }
+
+    /**
+     * Read a postcodes.io /validate reply. True = real postcode, false = postcodes.io says it does
+     * not exist, null = unknown (error, timeout, odd reply). Callers fail open on null.
+     *
+     * @param int   $status  HTTP status (0 when the request failed).
+     * @param mixed $decoded Decoded JSON body.
+     * @return bool|null
+     */
+    public static function interpret_postcodes_io_validate( $status, $decoded ) {
+        if ( (int) $status !== 200 || ! is_array( $decoded ) || ! array_key_exists( 'result', $decoded ) ) {
+            return null;
+        }
+        if ( $decoded['result'] === true ) {
+            return true;
+        }
+        if ( $decoded['result'] === false ) {
+            return false;
+        }
+        return null;
+    }
+
+    /**
+     * Whether the optional server-side postcodes.io check is on (only used in postcodes.io mode).
+     *
+     * @return bool
+     */
+    public static function postcode_server_check_enabled() {
+        if ( ! function_exists( 'get_option' ) ) {
+            return false;
+        }
+        return self::address_lookup_mode() === 'postcodes_io' && get_option( 'osm_wl_postcode_server_check', '0' ) === '1';
+    }
+
+    /**
+     * Ask postcodes.io whether a postcode exists. Short timeout, fails open (null) on any problem.
+     *
+     * @param string $postcode Postcode already matching the local UK pattern.
+     * @return bool|null
+     */
+    private static function postcode_exists_remote( $postcode ) {
+        if ( ! function_exists( 'wp_remote_get' ) ) {
+            return null;
+        }
+        $response = wp_remote_get(
+            self::postcodes_io_validate_url( $postcode ),
+            [
+                'timeout'     => self::POSTCODES_IO_TIMEOUT,
+                'redirection' => 0,
+                'headers'     => [ 'Accept' => 'application/json' ],
+            ]
+        );
+        if ( is_wp_error( $response ) ) {
+            return null;
+        }
+        return self::interpret_postcodes_io_validate(
+            (int) wp_remote_retrieve_response_code( $response ),
+            json_decode( (string) wp_remote_retrieve_body( $response ), true )
+        );
+    }
+
+    /**
+     * Visitor message after OSM Helper confirmed the child was added.
+     *
+     * @param bool   $email_sent  Whether a confirmation email went out.
+     * @param bool   $note_given  Whether the parent typed a note.
+     * @param string $note_status Helper's note_status (none, written, skipped, failed).
+     * @param bool   $has_reply_to Whether replies to the confirmation reach the group.
+     * @return string
+     */
+    public static function success_message( $email_sent, $note_given, $note_status, $has_reply_to ) {
+        $message = 'Thank you. Your child has been added to the waiting list.';
+        if ( $email_sent ) {
+            $message .= ' We have emailed you a confirmation.';
+        }
+        if ( $note_given && in_array( $note_status, [ 'skipped', 'failed' ], true ) ) {
+            $message .= ( $email_sent && $has_reply_to )
+                ? ' We could not save your note automatically, so please reply to the confirmation email with it.'
+                : ' We could not save your note automatically, so please send it to the group directly.';
+        }
+        return $message;
     }
 
     /**
@@ -230,6 +391,14 @@ class OSM_Waiting_List {
         }
 
         $errors = self::validate( $values );
+
+        // Optional postcodes.io existence check (fails open: only a definite "no" blocks).
+        if ( empty( $errors['child_postcode'] ) && self::postcode_server_check_enabled() ) {
+            if ( self::postcode_exists_remote( $values['child_postcode'] ) === false ) {
+                $errors['child_postcode'] = 'We could not find that postcode. Please check it and try again.';
+            }
+        }
+
         if ( ! empty( $errors ) ) {
             return [
                 'success' => false,
@@ -253,14 +422,8 @@ class OSM_Waiting_List {
         try {
             $payload = self::build_osm_payload( $values );
             // Captcha already verified. Pass through to OSM Helper; do not store in WordPress.
-            OSM_Helper_Client::submit_waiting_list( $payload );
+            $helper = OSM_Helper_Client::submit_waiting_list( $payload );
             self::record_rate_limit_hit();
-
-            return [
-                'success' => true,
-                'message' => 'Thank you. Your child has been added to the waiting list.',
-                'values'  => [],
-            ];
         } catch ( Exception $e ) {
             // Do not leak OSM credentials or raw API bodies to visitors.
             error_log( 'OSM waiting list submission failed: ' . $e->getMessage() );
@@ -272,6 +435,31 @@ class OSM_Waiting_List {
                 'values'  => $values,
             ];
         }
+
+        // OSM Helper confirmed the member exists. Nothing below may turn this into a failure.
+        $note_given  = isset( $payload['parent_note'] );
+        $note_status = (string) ( $helper['note_status'] ?? 'none' );
+        if ( ! empty( $helper['partial'] ) ) {
+            // No child or parent details in the log.
+            error_log(
+                'OSM waiting list: child added (OSM scoutid ' . (int) ( $helper['scoutid'] ?? 0 ) . ') but the parent note was '
+                . $note_status . '. ' . implode( ' ', array_map( 'strval', (array) ( $helper['warnings'] ?? [] ) ) )
+            );
+        }
+
+        $email_sent = false;
+        try {
+            $email_sent = OSM_Waiting_List_Email::send_confirmation( $values );
+        } catch ( Throwable $e ) {
+            error_log( 'OSM waiting list: confirmation email failed after a successful OSM write.' );
+        }
+
+        return [
+            'success' => true,
+            'partial' => ! empty( $helper['partial'] ),
+            'message' => self::success_message( $email_sent, $note_given, $note_status, OSM_Waiting_List_Email::reply_to() !== '' ),
+            'values'  => [],
+        ];
     }
 
     /**
@@ -311,6 +499,14 @@ class OSM_Waiting_List {
         if ( function_exists( 'sanitize_email' ) ) {
             $out['parent1_email'] = sanitize_email( wp_unslash( $post['parent1_email'] ?? '' ) );
             $out['parent2_email'] = sanitize_email( wp_unslash( $post['parent2_email'] ?? '' ) );
+        }
+
+        $raw_note = $post['parent_note'] ?? '';
+        $raw_note = is_string( $raw_note ) ? $raw_note : '';
+        if ( function_exists( 'sanitize_textarea_field' ) ) {
+            $out['parent_note'] = self::clean_note( sanitize_textarea_field( wp_unslash( $raw_note ) ), false );
+        } else {
+            $out['parent_note'] = self::clean_note( $raw_note, false );
         }
 
         $out['consent'] = isset( $post['consent'] ) ? '1' : '';
@@ -452,6 +648,10 @@ class OSM_Waiting_List {
         }
 
         return null;
+    }
+
+    private static function text_length( $value ) {
+        return function_exists( 'mb_strlen' ) ? mb_strlen( (string) $value, 'UTF-8' ) : strlen( (string) $value );
     }
 
     private static function is_blank( $value ) {

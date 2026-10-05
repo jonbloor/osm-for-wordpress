@@ -110,7 +110,7 @@ Shows a public form for joining an OSM waiting list via OSM Helper. Configure **
 
 **Required fields:** child first name, last name, date of birth (UK day/month/year), postcode; parent 1 first name, last name, email, phone; consent checkbox.
 
-**Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required).
+**Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required); a parent note (“Anything else we should know?”, up to 1000 characters).
 
 On a successful write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
 
@@ -121,6 +121,46 @@ Optional spam protection (per site, checked on the server before calling OSM Hel
 - **Cloudflare Turnstile** — site key and secret key from the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
 
 Setting keys: `osm_helper_base_url`, `osm_helper_site_key`, `osm_waiting_list_captcha` (`off`, `recaptcha`, or `turnstile`), plus captcha site/secret keys. A blank secret field does not wipe a stored secret. Failed verification shows a form error and does not call OSM Helper.
+
+##### Parent note
+
+The optional note is plain text: tags and control characters are stripped in WordPress and again in OSM Helper, and it is limited to 1000 characters. OSM Helper writes it to the waiting list’s **Notes** custom field in OSM, the field leaders choose in OSM Helper under **Waiting list → Rank & notes settings** (OSM “Customisable data”, group 5). It uses the same history format as the Rank & notes screen:
+
+```plaintext
+05/10/26 10:30 - Parent (website form) - "Sibling already in Beavers"
+```
+
+The note is written after the child and parent contacts. If no Notes field is chosen in OSM Helper, or OSM refuses the note, **the child is still added**. OSM Helper replies `ok: true` with `partial: true` and a `note_status` of `skipped` or `failed`. WordPress logs it (no personal details) and asks the parent to send the note another way.
+
+##### Confirmation email
+
+After OSM Helper confirms the child is on the list, WordPress sends a plain-text receipt with `wp_mail` to parent 1, and by default to parent 2 if they gave an email. Each parent gets a separate email. It is **never** sent when the OSM write failed, and nothing is stored in WordPress. If emails do not arrive, use an SMTP plugin.
+
+Settings (Waiting List tab): send confirmation (default **on**), also email parent 2 (default on), group name, From name, optional reply-to address, subject and message. Clear the subject or message to go back to the UK English default.
+
+Placeholders: `{parent_first_name}` (the parent receiving it), `{child_first_name}`, `{child_last_name}`, `{group_name}`, `{site_name}`, `{site_url}`, `{submitted_date}`, `{parent_note}`.
+
+Setting keys: `osm_wl_email_enabled`, `osm_wl_email_parent2` (`1`/`0`), `osm_wl_group_name`, `osm_wl_email_from_name`, `osm_wl_email_reply_to`, `osm_wl_email_subject`, `osm_wl_email_body`.
+
+##### Address lookup
+
+Choose one under **OSM Settings → Waiting List → Address lookup**. Its script loads only on pages that show the `[osm_waiting_list]` form. Manual entry always still works, and it works with captcha off, reCAPTCHA or Turnstile.
+
+- **Off** (default): parents type the address.
+- **Google Places autocomplete**: parents start typing and pick an address; results are limited to the UK, and address line 1, town and postcode are filled in. You need a Google Maps JavaScript API key with **Places API (New)** enabled (a key that only has the legacy Places API falls back to Google’s older widget). Google requires **billing enabled** on the Cloud project, but there is a **monthly free allowance**, which normally covers a group waiting list. Set a budget alert to be sure. Restrict the key to your site’s address (HTTP referrer) and to those APIs. The key is public: it is included in the page. Without a key the form falls back to manual entry.
+- **postcodes.io postcode check**: **free and open data**, with no key or account. When the parent leaves the postcode box, the browser calls `https://api.postcodes.io/postcodes/{postcode}`, shows whether the postcode exists, tidies its format, and fills the town if it is empty (parish, or the local authority (`admin_district`) when there is no parish). It **cannot list house addresses**, so parents still type address line 1. You can also tick the optional **server-side check**: when the form is sent, WordPress calls `https://api.postcodes.io/postcodes/{postcode}/validate` with a 3-second timeout. Only a definite “not a postcode” blocks the form. Errors and timeouts let it through (fails open).
+
+Setting keys: `osm_wl_address_lookup` (`off`, `google`, `postcodes_io`), `osm_google_maps_api_key`, `osm_wl_postcode_server_check` (`1`/`0`).
+
+##### Offline tests
+
+No WordPress, network or OSM access needed:
+
+```bash
+php src/tests/waiting-list-validation-test.php
+php src/tests/waiting-list-flow-test.php
+node src/tests/waiting-list-js-test.js
+```
 
 ---
 
@@ -143,6 +183,8 @@ Setting keys: `osm_helper_base_url`, `osm_helper_site_key`, `osm_waiting_list_ca
   - OSM Helper base URL (default `https://osmhelper.co.uk`) and site key from OSM Helper Settings.
   - Waiting-list section ID is configured in OSM Helper, not here.
   - Choose spam protection: off, Google reCAPTCHA, or Cloudflare Turnstile. Keys are per site.
+  - Confirmation email to parents: on or off, parent 2 copy, group name, From name, reply-to, subject and message with placeholders.
+  - Address lookup: off, Google Places autocomplete (API key), or postcodes.io postcode check (optional server-side check).
 
 ---
 

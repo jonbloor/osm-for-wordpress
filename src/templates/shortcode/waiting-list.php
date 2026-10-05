@@ -9,11 +9,14 @@
  * @var bool       $section_configured
  * @var string     $captcha_mode
  * @var string     $captcha_site_key
+ * @var string     $address_lookup   off, google, or postcodes_io (effective mode)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
+
+$address_lookup = isset( $address_lookup ) ? (string) $address_lookup : 'off';
 
 $val = static function ( $key ) use ( $values ) {
     return isset( $values[ $key ] ) ? (string) $values[ $key ] : '';
@@ -72,9 +75,17 @@ $field_class = static function ( $key ) use ( $errors ) {
 
                 <div class="<?php echo esc_attr( $field_class( 'child_postcode' ) ); ?>">
                     <label for="osm_wl_child_postcode">Postcode <span class="osm-wl-required">(required)</span></label>
-                    <input type="text" id="osm_wl_child_postcode" name="child_postcode" required autocomplete="postal-code" value="<?php echo esc_attr( $val( 'child_postcode' ) ); ?>">
+                    <input type="text" id="osm_wl_child_postcode" name="child_postcode" required autocomplete="postal-code" value="<?php echo esc_attr( $val( 'child_postcode' ) ); ?>"<?php echo $address_lookup === 'postcodes_io' ? ' aria-describedby="osm_wl_postcode_status"' : ''; ?>>
+                    <?php if ( $address_lookup === 'postcodes_io' ) : ?><p class="osm-wl-lookup-status" id="osm_wl_postcode_status" aria-live="polite"></p><?php endif; ?>
                     <?php if ( $err( 'child_postcode' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'child_postcode' ) ); ?></p><?php endif; ?>
                 </div>
+
+                <?php if ( $address_lookup === 'google' ) : ?>
+                <div class="osm-wl-field osm-wl-address-search" id="osm_wl_address_search" hidden>
+                    <p class="osm-wl-label" id="osm_wl_address_search_label">Find the address <span class="osm-wl-optional">(optional)</span></p>
+                    <p class="osm-wl-hint">Start typing, then choose the address to fill in the boxes below. You can still type it yourself.</p>
+                </div>
+                <?php endif; ?>
 
                 <div class="<?php echo esc_attr( $field_class( 'child_address' ) ); ?>">
                     <label for="osm_wl_child_address">Address line 1 <span class="osm-wl-optional">(optional)</span></label>
@@ -143,6 +154,13 @@ $field_class = static function ( $key ) use ( $errors ) {
                     <?php if ( $err( 'parent2_phone' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'parent2_phone' ) ); ?></p><?php endif; ?>
                 </div>
             </fieldset>
+
+            <div class="<?php echo esc_attr( $field_class( 'parent_note' ) ); ?>">
+                <label for="osm_wl_parent_note">Anything else we should know? <span class="osm-wl-optional">(optional)</span></label>
+                <textarea id="osm_wl_parent_note" name="parent_note" rows="4" maxlength="<?php echo esc_attr( (string) OSM_Waiting_List::PARENT_NOTE_MAX ); ?>" aria-describedby="osm_wl_parent_note_hint"><?php echo esc_textarea( $val( 'parent_note' ) ); ?></textarea>
+                <p class="osm-wl-hint" id="osm_wl_parent_note_hint">For example, a brother or sister already in the group, or a preferred meeting night. Up to <?php echo esc_html( (string) OSM_Waiting_List::PARENT_NOTE_MAX ); ?> characters. Please do not include medical details here.</p>
+                <?php if ( $err( 'parent_note' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'parent_note' ) ); ?></p><?php endif; ?>
+            </div>
 
             <div class="<?php echo esc_attr( $field_class( 'consent' ) ); ?>">
                 <label class="osm-wl-consent" for="osm_wl_consent">

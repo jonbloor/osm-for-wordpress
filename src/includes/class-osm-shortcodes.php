@@ -204,8 +204,68 @@ class OSM_Shortcodes {
             }
         }
 
+        $address_lookup = self::enqueue_address_lookup( $section_configured && empty( $result['success'] ) );
+
         ob_start();
         include OSM_TEMPLATES_DIR . '/shortcode/waiting-list.php';
         return ob_get_clean();
+    }
+
+    /**
+     * Load the address lookup script only where the waiting-list shortcode renders a form.
+     * Independent of captcha mode (off, reCAPTCHA, Turnstile).
+     *
+     * @param bool $form_shown Whether the form is on the page.
+     * @return string Effective mode: off, google, or postcodes_io.
+     */
+    private static function enqueue_address_lookup( $form_shown ) {
+        $mode = OSM_Waiting_List::address_lookup_mode();
+        $google_key = trim( (string) get_option( 'osm_google_maps_api_key', '' ) );
+        if ( $mode === 'google' && $google_key === '' ) {
+            $mode = 'off'; // No key: plain manual entry.
+        }
+        if ( ! $form_shown || $mode === 'off' ) {
+            return 'off';
+        }
+
+        wp_enqueue_script(
+            'osm-waiting-list',
+            OSM_ASSETS_URI . '/js/waiting-list.js',
+            [],
+            '1.1.0',
+            [ 'in_footer' => true ]
+        );
+        wp_localize_script(
+            'osm-waiting-list',
+            'osmWaitingListConfig',
+            [
+                'mode'         => $mode,
+                'postcodesApi' => OSM_Waiting_List::POSTCODES_IO_BASE,
+                'i18n'         => [
+                    'checking' => 'Checking postcode…',
+                    'found'    => 'Postcode found.',
+                    'notFound' => 'We could not find that postcode. Please check it.',
+                    'invalid'  => 'That does not look like a UK postcode.',
+                ],
+            ]
+        );
+
+        if ( $mode === 'google' ) {
+            // Printed after waiting-list.js so the callback exists when Google calls it.
+            $src = add_query_arg(
+                [
+                    'key'       => rawurlencode( $google_key ),
+                    'libraries' => 'places',
+                    'loading'   => 'async',
+                    'callback'  => 'osmWlGoogleReady',
+                    'region'    => 'GB',
+                    'language'  => 'en-GB',
+                    'v'         => 'weekly',
+                ],
+                'https://maps.googleapis.com/maps/api/js'
+            );
+            wp_enqueue_script( 'osm-google-places', $src, [ 'osm-waiting-list' ], null, [ 'in_footer' => true ] );
+        }
+        return $mode;
     }
 }

@@ -40,6 +40,20 @@ class OSM_Admin {
         $has_recaptcha_secret = (bool) get_option( 'osm_recaptcha_secret_key' );
         $has_turnstile_secret = (bool) get_option( 'osm_turnstile_secret_key' );
 
+        // Confirmation email.
+        $email_enabled   = OSM_Waiting_List_Email::is_enabled();
+        $email_parent2   = OSM_Waiting_List_Email::send_to_parent2();
+        $group_name      = (string) get_option( 'osm_wl_group_name', '' );
+        $email_from_name = (string) get_option( 'osm_wl_email_from_name', '' );
+        $email_reply_to  = (string) get_option( 'osm_wl_email_reply_to', '' );
+        $email_subject   = OSM_Waiting_List_Email::subject_template();
+        $email_body      = OSM_Waiting_List_Email::body_template();
+
+        // Address lookup.
+        $address_lookup        = OSM_Waiting_List::address_lookup_mode();
+        $google_maps_api_key   = (string) get_option( 'osm_google_maps_api_key', '' );
+        $postcode_server_check = get_option( 'osm_wl_postcode_server_check', '0' ) === '1';
+
         include OSM_TEMPLATES_DIR . '/admin/settings.php';
     }
 
@@ -128,6 +142,16 @@ class OSM_Admin {
             'osm_turnstile_secret_key',
             'osm_helper_base_url',
             'osm_helper_site_key',
+            'osm_wl_email_enabled',
+            'osm_wl_email_parent2',
+            'osm_wl_group_name',
+            'osm_wl_email_from_name',
+            'osm_wl_email_reply_to',
+            'osm_wl_email_subject',
+            'osm_wl_email_body',
+            'osm_wl_address_lookup',
+            'osm_google_maps_api_key',
+            'osm_wl_postcode_server_check',
         ];
         foreach ( $options as $option ) {
             delete_option( $option );
@@ -176,7 +200,55 @@ class OSM_Admin {
         $this->update_secret_option( 'osm_recaptcha_secret_key', wp_unslash( $_POST['osm_recaptcha_secret_key'] ?? '' ) );
         $this->update_secret_option( 'osm_turnstile_secret_key', wp_unslash( $_POST['osm_turnstile_secret_key'] ?? '' ) );
 
-        set_transient( 'osm_admin_notice', [ 'type' => 'success', 'message' => 'Waiting list / OSM Helper settings saved.' ], 10 );
+        // Confirmation email (default on). Checkboxes are stored as '1' / '0' so "off" sticks.
+        update_option( 'osm_wl_email_enabled', isset( $_POST['osm_wl_email_enabled'] ) ? '1' : '0' );
+        update_option( 'osm_wl_email_parent2', isset( $_POST['osm_wl_email_parent2'] ) ? '1' : '0' );
+        $this->update_visible_option( 'osm_wl_group_name', wp_unslash( $_POST['osm_wl_group_name'] ?? '' ) );
+        $this->update_visible_option( 'osm_wl_email_from_name', wp_unslash( $_POST['osm_wl_email_from_name'] ?? '' ) );
+
+        $notices = [];
+        $reply_to = sanitize_email( wp_unslash( $_POST['osm_wl_email_reply_to'] ?? '' ) );
+        $reply_raw = trim( (string) wp_unslash( $_POST['osm_wl_email_reply_to'] ?? '' ) );
+        if ( $reply_raw === '' ) {
+            delete_option( 'osm_wl_email_reply_to' );
+        } elseif ( $reply_to !== '' && is_email( $reply_to ) ) {
+            update_option( 'osm_wl_email_reply_to', $reply_to );
+        } else {
+            $notices[] = 'The reply-to address was not valid, so it was not saved.';
+        }
+
+        // Saving the default text unchanged stores nothing, so future default improvements still apply.
+        $subject = sanitize_text_field( wp_unslash( $_POST['osm_wl_email_subject'] ?? '' ) );
+        if ( $subject === '' || $subject === OSM_Waiting_List_Email::default_subject() ) {
+            delete_option( 'osm_wl_email_subject' );
+        } else {
+            update_option( 'osm_wl_email_subject', $subject );
+        }
+        $body = sanitize_textarea_field( wp_unslash( $_POST['osm_wl_email_body'] ?? '' ) );
+        $body = str_replace( [ "\r\n", "\r" ], "\n", $body );
+        if ( trim( $body ) === '' || trim( $body ) === trim( OSM_Waiting_List_Email::default_body() ) ) {
+            delete_option( 'osm_wl_email_body' );
+        } else {
+            update_option( 'osm_wl_email_body', $body );
+        }
+
+        // Address lookup.
+        $lookup = sanitize_text_field( wp_unslash( $_POST['osm_wl_address_lookup'] ?? 'off' ) );
+        if ( ! in_array( $lookup, OSM_Waiting_List::ADDRESS_LOOKUP_MODES, true ) ) {
+            $lookup = 'off';
+        }
+        update_option( 'osm_wl_address_lookup', $lookup );
+        $this->update_visible_option( 'osm_google_maps_api_key', wp_unslash( $_POST['osm_google_maps_api_key'] ?? '' ) );
+        update_option( 'osm_wl_postcode_server_check', isset( $_POST['osm_wl_postcode_server_check'] ) ? '1' : '0' );
+        if ( $lookup === 'google' && trim( (string) get_option( 'osm_google_maps_api_key', '' ) ) === '' ) {
+            $notices[] = 'Google address lookup needs a Google Maps JavaScript API key. Until one is saved the form uses manual address entry.';
+        }
+
+        $message = 'Waiting list / OSM Helper settings saved.';
+        if ( ! empty( $notices ) ) {
+            $message .= ' ' . implode( ' ', $notices );
+        }
+        set_transient( 'osm_admin_notice', [ 'type' => empty( $notices ) ? 'success' : 'error', 'message' => $message ], 10 );
 
         wp_redirect( admin_url( 'admin.php?page=osm-for-wordpress&tab=waiting_list' ) );
         exit;

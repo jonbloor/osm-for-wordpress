@@ -226,6 +226,90 @@
                     </td>
                 </tr>
             </table>
+
+            <h3>Parent note</h3>
+            <p class="description">The form has an optional “Anything else we should know?” box (up to <?php echo esc_html( (string) OSM_Waiting_List::PARENT_NOTE_MAX ); ?> characters, plain text). OSM Helper saves it to the waiting list’s <strong>Notes</strong> field, the one chosen in <a href="https://osmhelper.co.uk/waiting-list/fields/" target="_blank" rel="noopener noreferrer">OSM Helper → Waiting list → Rank &amp; notes settings</a>, as a line like <code>05/10/26 10:30 - Parent (website form) - "…"</code>. If no Notes field is chosen there, or OSM refuses the note, the child is still added. The parent is asked to send the note another way, and the problem is written to the PHP error log.</p>
+
+            <h3>Confirmation email</h3>
+            <p class="description">Sent with WordPress’s own mail function (<code>wp_mail</code>) only after OSM Helper confirms the child is on the OSM waiting list. It is never sent if the OSM write fails. Nothing from the form is stored in WordPress. If emails do not arrive, set up an SMTP plugin for this site.</p>
+            <table class="form-table">
+                <tr>
+                    <th>Send confirmation</th>
+                    <td>
+                        <label><input type="checkbox" name="osm_wl_email_enabled" value="1" <?php checked( $email_enabled ); ?>> Email parent 1 a receipt after a successful submission</label><br>
+                        <label><input type="checkbox" name="osm_wl_email_parent2" value="1" <?php checked( $email_parent2 ); ?>> Also email parent 2 (if they gave an email address)</label>
+                        <p class="description">On by default. Each parent gets a separate email, so they do not see each other’s address.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_wl_group_name">Group name</label></th>
+                    <td>
+                        <input type="text" id="osm_wl_group_name" name="osm_wl_group_name" value="<?php echo esc_attr( $group_name ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_bloginfo( 'name' ) ); ?>">
+                        <p class="description">Used for <code>{group_name}</code>. Leave blank to use the site title.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_wl_email_from_name">From name</label></th>
+                    <td>
+                        <input type="text" id="osm_wl_email_from_name" name="osm_wl_email_from_name" value="<?php echo esc_attr( $email_from_name ); ?>" class="regular-text" placeholder="<?php echo esc_attr( OSM_Waiting_List_Email::group_name() ); ?>">
+                        <p class="description">The sender name parents see. Leave blank to use the group name. The from address is still WordPress’s (or your SMTP plugin’s), which helps delivery.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_wl_email_reply_to">Reply-to email</label></th>
+                    <td>
+                        <input type="email" id="osm_wl_email_reply_to" name="osm_wl_email_reply_to" value="<?php echo esc_attr( $email_reply_to ); ?>" class="regular-text" placeholder="waitinglist@example.org.uk">
+                        <p class="description">Optional. Where parents’ replies go, for example your waiting-list or group secretary address. Without it, replies go to the from address.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_wl_email_subject">Subject</label></th>
+                    <td>
+                        <input type="text" id="osm_wl_email_subject" name="osm_wl_email_subject" value="<?php echo esc_attr( $email_subject ); ?>" class="large-text">
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_wl_email_body">Message</label></th>
+                    <td>
+                        <textarea id="osm_wl_email_body" name="osm_wl_email_body" rows="14" class="large-text code"><?php echo esc_textarea( $email_body ); ?></textarea>
+                        <p class="description">Plain text. Clear the subject or message and save to go back to the default text. Placeholders:</p>
+                        <ul class="osm-placeholder-list"><?php foreach ( OSM_Waiting_List_Email::PLACEHOLDERS as $tag => $label ) : ?><li><code><?php echo esc_html( $tag ); ?></code> – <?php echo esc_html( $label ); ?></li><?php endforeach; ?></ul>
+                    </td>
+                </tr>
+            </table>
+
+            <h3>Address lookup</h3>
+            <table class="form-table">
+                <tr>
+                    <th><label for="osm_wl_address_lookup">Address lookup</label></th>
+                    <td>
+                        <select id="osm_wl_address_lookup" name="osm_wl_address_lookup">
+                            <option value="off" <?php selected( $address_lookup, 'off' ); ?>>Off: parents type the address (default)</option>
+                            <option value="google" <?php selected( $address_lookup, 'google' ); ?>>Google Places address autocomplete (needs an API key)</option>
+                            <option value="postcodes_io" <?php selected( $address_lookup, 'postcodes_io' ); ?>>Postcode check with postcodes.io (free, no key)</option>
+                        </select>
+                        <p class="description">Scripts load only on pages showing <code>[osm_waiting_list]</code>. Manual entry always still works, and this works with captcha off, reCAPTCHA or Turnstile.</p>
+                        <ul class="osm-placeholder-list">
+                            <li><strong>Google Places:</strong> parents start typing and pick their address, and address line 1, town and postcode are filled in. Results are limited to the UK. Google needs a billing account on the Cloud project, but there is a monthly free allowance, so a small group’s waiting list normally costs nothing. Set a budget alert to be sure.</li>
+                            <li><strong>postcodes.io:</strong> free and open data, with no key or account. When the parent leaves the postcode box, the browser checks the postcode and fills in the town if it is empty. It <em>cannot</em> list house addresses, so parents still type address line 1.</li>
+                        </ul>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="osm_google_maps_api_key">Google Maps API key</label></th>
+                    <td>
+                        <input type="text" id="osm_google_maps_api_key" name="osm_google_maps_api_key" value="<?php echo esc_attr( $google_maps_api_key ); ?>" class="regular-text" autocomplete="off">
+                        <p class="description">Only for Google Places. In <a href="https://console.cloud.google.com/google/maps-apis/" target="_blank" rel="noopener noreferrer">Google Cloud console</a>, turn on billing, then enable the <strong>Maps JavaScript API</strong> and <strong>Places API (New)</strong>. (Older keys that only have the legacy Places API still work, using Google’s older widget.) Restrict the key to <em>Websites</em> with this site’s address (<code><?php echo esc_html( home_url( '/*' ) ); ?></code>), and to those two APIs. The key is public: it is included in the page.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Server-side postcode check</th>
+                    <td>
+                        <label><input type="checkbox" name="osm_wl_postcode_server_check" value="1" <?php checked( $postcode_server_check ); ?>> Also check the postcode with postcodes.io when the form is sent</label>
+                        <p class="description">Only used with the postcodes.io option. A postcode that postcodes.io says does not exist is sent back to the parent to correct. If postcodes.io is slow (over <?php echo esc_html( (string) OSM_Waiting_List::POSTCODES_IO_TIMEOUT ); ?> seconds) or unavailable, the form carries on (fails open). Off by default.</p>
+                    </td>
+                </tr>
+            </table>
             <?php submit_button( 'Save Waiting List Settings' ); ?>
         </form>
         <?php if ( OSM_API::blocked_flag_is_set( $api_blocked ) ): ?>

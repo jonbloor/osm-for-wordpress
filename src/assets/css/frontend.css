@@ -91,7 +91,8 @@
 
 .osm-wl-field input[type="text"],
 .osm-wl-field input[type="email"],
-.osm-wl-field input[type="tel"] {
+.osm-wl-field input[type="tel"],
+.osm-wl-field textarea {
     width: 100%;
     max-width: 100%;
     padding: 0.5rem 0.65rem;
@@ -100,7 +101,8 @@
     box-sizing: border-box;
 }
 
-.osm-wl-field--error input {
+.osm-wl-field--error input,
+.osm-wl-field--error textarea {
     border-color: #b00020;
 }
 
@@ -161,4 +163,41 @@
 
 .osm-wl-captcha {
     margin: 0 0 1rem;
+}
+
+.osm-wl-field textarea {
+    resize: vertical;
+    min-height: 6rem;
+    font: inherit;
+}
+
+.osm-wl-label {
+    display: block;
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+}
+
+.osm-wl-address-search gmp-place-autocomplete,
+.osm-wl-address-search gmp-basic-place-autocomplete {
+    display: block;
+    width: 100%;
+    max-width: 32rem;
+}
+
+.osm-wl-lookup-status {
+    margin: 0.35rem 0 0;
+    font-size: 0.9em;
+    min-height: 1.2em;
+}
+
+.osm-wl-lookup-status--info {
+    color: #555;
+}
+
+.osm-wl-lookup-status--ok {
+    color: #1b6e2d;
+}
+
+.osm-wl-lookup-status--error {
+    color: #b00020;
 }
