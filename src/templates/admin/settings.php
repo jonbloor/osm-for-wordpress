@@ -2,7 +2,7 @@
     <h1>Online Scout Manager for WordPress</h1>
 
     <?php if ( ! OSM_Helper_Client::is_configured() ): ?>
-        <div class="notice notice-warning"><p><strong>Waiting list not linked to OSM Helper.</strong> Open the <strong>Waiting List</strong> tab, set the OSM Helper base URL, and paste the site key from OSM Helper Settings.</p></div>
+        <div class="notice notice-warning"><p><strong>Waiting list not linked to OSM Helper.</strong> Open the <strong>Waiting List</strong> tab, set the OSM Helper base URL, and paste the site key from <a href="https://osmhelper.co.uk/wordpress-form/" target="_blank" rel="noopener noreferrer">OSM Helper → Members → Joining form</a>.</p></div>
     <?php elseif ( empty( $enabled_sections ) ): ?>
         <div class="notice notice-info"><p>No programme/events sections enabled. Waiting-list forms do not need that — they go through OSM Helper.</p></div>
     <?php endif; ?>
@@ -165,7 +165,7 @@
         </form>
     <?php elseif ( $active_tab === 'waiting_list' ): ?>
         <h2>Waiting List (via OSM Helper)</h2>
-        <p>Parents fill this form on your website. They never log in to OSM or approve an app. OSM Helper already holds the one-time OSM approval for your group. Choose the waiting-list section and copy the site key in <a href="https://osmhelper.co.uk/settings/" target="_blank" rel="noopener noreferrer">OSM Helper → Settings</a> after you are signed in there.</p>
+        <p>Parents fill this form on your website. They never log in to OSM or approve an app. OSM Helper already holds the one-time OSM approval for your group. Choose the waiting-list section and copy the site key on <a href="https://osmhelper.co.uk/wordpress-form/" target="_blank" rel="noopener noreferrer">OSM Helper → Members → Joining form</a> after you are signed in there. That page also has the latest plugin download, step-by-step setup and troubleshooting.</p>
         <p>This plugin does <strong>not</strong> ask for an OSM client ID, client secret, or Connect with OSM. Other groups do not need to create an OSM application.</p>
         <p>Use the shortcode <code>[osm_waiting_list]</code> on any page. When OSM Helper accepts a submission, the plugin does not store the form data in WordPress.</p>
         <p>Validation, honeypot, per-IP rate limit, and captcha run here first. Captcha (if enabled) is verified on the server before calling OSM Helper.</p>
@@ -183,7 +183,7 @@
                     <th><label for="osm_helper_site_key">OSM Helper site key</label></th>
                     <td>
                         <input type="password" id="osm_helper_site_key" name="osm_helper_site_key" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $has_helper_site_key ? esc_attr( 'A site key is saved. Leave blank to keep it.' ) : ''; ?>">
-                        <p class="description">Copy from OSM Helper Settings → WordPress waiting-list form. Leave blank to keep the saved key. It is stored in WordPress options and is not shown again.</p>
+                        <p class="description">Copy from <a href="https://osmhelper.co.uk/wordpress-form/" target="_blank" rel="noopener noreferrer">OSM Helper → Members → Joining form</a>. Leave blank to keep the saved key. It is stored in WordPress options and is not shown again.</p>
                     </td>
                 </tr>
                 <tr>
@@ -314,7 +314,7 @@
         </form>
         <?php if ( OSM_API::blocked_flag_is_set( $api_blocked ) ): ?>
             <h3>Legacy OSM block</h3>
-            <p>A previous direct OSM connection stored an X-Blocked flag. Waiting-list intake uses OSM Helper; clear Helper’s WordPress block there if needed.</p>
+            <p>A previous direct OSM connection stored an X-Blocked flag. Waiting-list intake uses OSM Helper; clear Helper’s WordPress block on <a href="https://osmhelper.co.uk/wordpress-form/" target="_blank" rel="noopener noreferrer">OSM Helper → Members → Joining form</a> if needed.</p>
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php?action=osm_clear_api_block' ) ); ?>">
                 <?php wp_nonce_field( 'osm_clear_api_block' ); ?>
                 <?php submit_button( 'Clear legacy OSM API block', 'delete' ); ?>

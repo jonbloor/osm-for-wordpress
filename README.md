@@ -17,11 +17,13 @@ The Online Scout Manager (OSM) for WordPress plugin allows you to display progra
 
 ## Installation
 
-1. Download the latest release of the plugin from [here](https://github.com/alantiller/osm-for-wordpress/releases)
+1. Download the plugin zip. For the OSM Helper waiting-list form, sign in to OSM Helper and use **Download plugin** on [Members → Joining form](https://osmhelper.co.uk/wordpress-form/). (Upstream releases without the waiting-list form are [here](https://github.com/alantiller/osm-for-wordpress/releases).)
 2. Log in to your WordPress admin dashboard.
 3. Navigate to **Plugins > Add New > Upload Plugin**.
 4. Select the zip file and click **Install Now**.
 5. Activate the plugin.
+
+To update, upload the new zip the same way and choose **Replace current with uploaded**. Settings are kept.
 
 ---
 
@@ -37,9 +39,9 @@ Parents never log in to OSM. The one-time OSM approval lives in OSM Helper (`htt
 In OSM Helper:
 
 1. Sign in at [osmhelper.co.uk](https://osmhelper.co.uk).
-2. Open **Settings**.
-3. Under **WordPress waiting-list form**, choose your OSM waiting-list section (do not hardcode another group’s section id).
-4. Save to create a site key, then copy it.
+2. Open **Members → Joining form** ([osmhelper.co.uk/wordpress-form/](https://osmhelper.co.uk/wordpress-form/)). That page has the latest plugin download (version and build shown), step-by-step setup, the Notes field status and troubleshooting.
+3. Choose your OSM waiting-list section (do not hardcode another group’s section id).
+4. Select **Save** to create a site key, then copy it. **Save and make a new site key** replaces it; **Turn off the form** removes it.
 
 In WordPress:
 
@@ -57,7 +59,7 @@ Programme and events shortcodes may still use a previously stored OSM token if o
 
 ### Blocks, invalid data, and rate limits
 
-Waiting-list writes go through OSM Helper, which honours `X-Blocked` (stop), surfaces `X-Deprecated`, and does not retry HTTP 429. Clear a Helper intake block under OSM Helper Settings after fixing the cause.
+Waiting-list writes go through OSM Helper, which honours `X-Blocked` (stop), surfaces `X-Deprecated`, and does not retry HTTP 429. Clear a Helper intake block on the OSM Helper [Joining form page](https://osmhelper.co.uk/wordpress-form/) after fixing the cause.
 
 ---
 
@@ -106,7 +108,7 @@ Example:
 [osm_waiting_list]
 ```
 
-Shows a public form for joining an OSM waiting list via OSM Helper. Configure **OSM Helper base URL** and **site key** under **OSM Settings → Waiting List**. The waiting-list **section ID** is chosen in OSM Helper Settings (not in WordPress).
+Shows a public form for joining an OSM waiting list via OSM Helper. Configure **OSM Helper base URL** and **site key** under **OSM Settings → Waiting List**. The waiting-list **section ID** is chosen in OSM Helper on the [Joining form page](https://osmhelper.co.uk/wordpress-form/) (not in WordPress).
 
 **Required fields:** child first name, last name, date of birth (UK day/month/year); home address line 1 and postcode; parent 1 first name, last name, email, phone; consent checkbox.
 
@@ -184,7 +186,7 @@ node src/tests/waiting-list-js-test.js
   - **Time Format**: Customize the time format used in the plugin. Default: `H:i`.
 
 - **Waiting List**:
-  - OSM Helper base URL (default `https://osmhelper.co.uk`) and site key from OSM Helper Settings.
+  - OSM Helper base URL (default `https://osmhelper.co.uk`) and site key from the OSM Helper [Joining form page](https://osmhelper.co.uk/wordpress-form/).
   - Waiting-list section ID is configured in OSM Helper, not here.
   - Choose spam protection: off, Google reCAPTCHA, or Cloudflare Turnstile. Keys are per site.
   - Confirmation email to parents: on or off, parent 2 copy, group name, From name, reply-to, subject and message with placeholders.
