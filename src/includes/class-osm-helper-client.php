@@ -40,7 +40,12 @@ class OSM_Helper_Client {
      * @return string
      */
     public static function submit_url( $base = null ) {
-        $base = $base === null ? self::base_url() : rtrim( (string) $base, '/' );
+        $base = $base === null ? self::base_url() : rtrim( trim( (string) $base ), '/' );
+        // Accept the full endpoint pasted as the base URL.
+        $suffix = self::SUBMIT_PATH;
+        while ( strlen( $base ) >= strlen( $suffix ) && substr( $base, -strlen( $suffix ) ) === $suffix ) {
+            $base = rtrim( substr( $base, 0, -strlen( $suffix ) ), '/' );
+        }
         return $base . self::SUBMIT_PATH;
     }
 
