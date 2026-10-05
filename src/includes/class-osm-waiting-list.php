@@ -29,7 +29,8 @@ class OSM_Waiting_List {
             'child_first_name'  => 'Please enter the child\'s first name.',
             'child_last_name'   => 'Please enter the child\'s last name.',
             'child_dob'         => 'Please enter the child\'s date of birth.',
-            'child_postcode'    => 'Please enter the child\'s postcode.',
+            'child_address'     => 'Please enter the first line of the address.',
+            'child_postcode'    => 'Please enter the postcode.',
             'parent1_first_name'=> 'Please enter parent 1\'s first name.',
             'parent1_last_name' => 'Please enter parent 1\'s last name.',
             'parent1_email'     => 'Please enter parent 1\'s email address.',
@@ -98,6 +99,9 @@ class OSM_Waiting_List {
             if ( ! self::is_blank( $p2_fields['parent2_phone'] ) && ! self::is_valid_phone( $p2_fields['parent2_phone'] ) ) {
                 $errors['parent2_phone'] = 'Please enter a valid phone number for parent 2.';
             }
+            if ( self::is_ticked( $input['parent2_sms'] ?? '' ) && self::is_blank( $p2_fields['parent2_phone'] ) && empty( $errors['parent2_phone'] ) ) {
+                $errors['parent2_phone'] = 'Please enter parent 2\'s phone number to receive text messages, or untick that box.';
+            }
         }
 
         return $errors;
@@ -144,18 +148,22 @@ class OSM_Waiting_List {
             'startedsection' => $today,
         ];
 
-        // Member's own details (group_id 6): address and postcode.
-        // Field names from OSM customdata core columns (line_1, line_3, postcode).
-        // Source: ollytheninja/OSM-API-Docs (Apiary) customdata getData response.
-        $member_details = [
-            'postcode' => strtoupper( preg_replace( '/\s+/', ' ', trim( $input['child_postcode'] ) ) ),
+        // Member's own details (group_id 6): home address.
+        // OSM Helper maps line_1..line_4 to OSM's core address columns:
+        // address1 (line 1), address2 (line 2), address3 (town), address4 (county), postcode.
+        $member_details = [];
+        $address_map = [
+            'child_address'  => 'line_1',
+            'child_address2' => 'line_2',
+            'child_town'     => 'line_3',
+            'child_county'   => 'line_4',
         ];
-        if ( ! self::is_blank( $input['child_address'] ?? '' ) ) {
-            $member_details['line_1'] = $input['child_address'];
+        foreach ( $address_map as $field => $key ) {
+            if ( ! self::is_blank( $input[ $field ] ?? '' ) ) {
+                $member_details[ $key ] = trim( (string) $input[ $field ] );
+            }
         }
-        if ( ! self::is_blank( $input['child_town'] ?? '' ) ) {
-            $member_details['line_3'] = $input['child_town'];
-        }
+        $member_details['postcode'] = self::normalise_postcode( $input['child_postcode'] );
 
         // Primary Contact 1 (group_id 1).
         // Field names from newcastlescouts/osm-api-docs contact update example.
@@ -165,6 +173,11 @@ class OSM_Waiting_List {
             'email1'    => $input['parent1_email'],
             'phone1'    => $input['parent1_phone'],
         ];
+        // "Receive text messages from Leaders?" = OSM's receive-SMS flag on phone 1 (data[phone1_sms]).
+        // Ticked → 'yes'. Unticked → left unset (OSM shows a blank flag as no).
+        if ( self::is_ticked( $input['parent1_sms'] ?? '' ) ) {
+            $contact1['phone1_sms'] = 'yes';
+        }
 
         $contact2 = null;
         $p2_any = ! self::is_blank( $input['parent2_first_name'] ?? '' )
@@ -180,6 +193,9 @@ class OSM_Waiting_List {
             ];
             if ( ! self::is_blank( $input['parent2_phone'] ?? '' ) ) {
                 $contact2['phone1'] = $input['parent2_phone'];
+                if ( self::is_ticked( $input['parent2_sms'] ?? '' ) ) {
+                    $contact2['phone1_sms'] = 'yes';
+                }
             }
         }
 
@@ -475,7 +491,9 @@ class OSM_Waiting_List {
             'child_dob',
             'child_postcode',
             'child_address',
+            'child_address2',
             'child_town',
+            'child_county',
             'parent1_first_name',
             'parent1_last_name',
             'parent1_email',
@@ -510,6 +528,8 @@ class OSM_Waiting_List {
         }
 
         $out['consent'] = isset( $post['consent'] ) ? '1' : '';
+        $out['parent1_sms'] = self::is_ticked( $post['parent1_sms'] ?? '' ) ? '1' : '';
+        $out['parent2_sms'] = self::is_ticked( $post['parent2_sms'] ?? '' ) ? '1' : '';
 
         return $out;
     }
@@ -652,6 +672,16 @@ class OSM_Waiting_List {
 
     private static function text_length( $value ) {
         return function_exists( 'mb_strlen' ) ? mb_strlen( (string) $value, 'UTF-8' ) : strlen( (string) $value );
+    }
+
+    /**
+     * Checkbox value posted as '1' (or true).
+     *
+     * @param mixed $value Posted value.
+     * @return bool
+     */
+    public static function is_ticked( $value ) {
+        return $value === '1' || $value === 1 || $value === true;
     }
 
     private static function is_blank( $value ) {

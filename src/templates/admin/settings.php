@@ -290,8 +290,8 @@
                         </select>
                         <p class="description">Scripts load only on pages showing <code>[osm_waiting_list]</code>. Manual entry always still works, and this works with captcha off, reCAPTCHA or Turnstile.</p>
                         <ul class="osm-placeholder-list">
-                            <li><strong>Google Places:</strong> parents start typing and pick their address, and address line 1, town and postcode are filled in. Results are limited to the UK. Google needs a billing account on the Cloud project, but there is a monthly free allowance, so a small group’s waiting list normally costs nothing. Set a budget alert to be sure.</li>
-                            <li><strong>postcodes.io:</strong> free and open data, with no key or account. When the parent leaves the postcode box, the browser checks the postcode and fills in the town if it is empty. It <em>cannot</em> list house addresses, so parents still type address line 1.</li>
+                            <li><strong>Google Places:</strong> parents start typing and pick their address, and address line 1, line 2, town, county and postcode are filled in. Results are limited to the UK. Google needs a billing account on the Cloud project, but there is a monthly free allowance, so a small group’s waiting list normally costs nothing. Set a budget alert to be sure.</li>
+                            <li><strong>postcodes.io:</strong> free and open data, with no key or account. When the parent leaves the postcode box, the browser checks the postcode and fills in the town and county if they are empty (county only where postcodes.io has one). It <em>cannot</em> list house addresses, so parents still type address line 1.</li>
                         </ul>
                     </td>
                 </tr>

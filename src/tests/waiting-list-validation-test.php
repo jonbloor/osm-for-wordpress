@@ -277,6 +277,52 @@ assert_true( str_contains( $body, 'Dear Alex,' ) && str_contains( $body, 'Jamie 
 assert_true( OSM_Waiting_List_Email::headers() === [ 'Content-Type: text/plain; charset=UTF-8' ], 'plain-text header, no reply-to by default' );
 assert_true( OSM_Waiting_List_Email::send_confirmation( valid_base() ) === false, 'no wp_mail available → nothing sent, no error' );
 
+// --- Address order, line 2 / county, receive texts ---
+$input = valid_base();
+$input['child_address'] = '';
+$errors = OSM_Waiting_List::validate( $input );
+assert_true( isset( $errors['child_address'] ), 'address line 1 is required' );
+$input = valid_base();
+$input['child_address2'] = 'Packington';
+$input['child_county']   = 'Leicestershire';
+$input['child_postcode'] = 'le651ab';
+$payload = OSM_Waiting_List::build_osm_payload( $input );
+assert_true( $payload['member_details'] === [ 'line_1' => '1 High Street', 'line_2' => 'Packington', 'line_3' => 'Ashby', 'line_4' => 'Leicestershire', 'postcode' => 'LE65 1AB' ], 'address maps to line_1..line_4 + postcode (Helper → address1..address4)' );
+$payload = OSM_Waiting_List::build_osm_payload( valid_base() );
+assert_true( ! isset( $payload['member_details']['line_2'] ) && ! isset( $payload['member_details']['line_4'] ), 'blank line 2 / county are omitted' );
+assert_true( ! isset( $payload['contact1']['phone1_sms'] ), 'receive texts unticked → phone1_sms not sent' );
+$input = valid_base();
+$input['parent1_sms'] = '1';
+$payload = OSM_Waiting_List::build_osm_payload( $input );
+assert_true( ( $payload['contact1']['phone1_sms'] ?? '' ) === 'yes', 'parent 1 receive texts → phone1_sms yes' );
+$input = valid_base();
+$input['parent2_first_name'] = 'Sam';
+$input['parent2_last_name']  = 'River';
+$input['parent2_email']      = 'sam@example.org';
+$input['parent2_sms']        = '1';
+$errors = OSM_Waiting_List::validate( $input );
+assert_true( isset( $errors['parent2_phone'] ), 'parent 2 receive texts without a phone number is rejected' );
+$input['parent2_phone'] = '07700900456';
+assert_true( OSM_Waiting_List::validate( $input ) === [], 'parent 2 receive texts with a phone number is accepted' );
+$payload = OSM_Waiting_List::build_osm_payload( $input );
+assert_true( ( $payload['contact2']['phone1_sms'] ?? '' ) === 'yes', 'parent 2 receive texts → contact 2 phone1_sms yes' );
+$input = valid_base();
+$input['parent2_sms'] = '1';
+assert_true( OSM_Waiting_List::validate( $input ) === [], 'stray parent 2 tick with no parent 2 details is ignored' );
+assert_true( OSM_Waiting_List::build_osm_payload( $input )['contact2'] === null, 'stray parent 2 tick does not create contact 2' );
+$san = OSM_Waiting_List::sanitise_input( valid_base() + [ 'parent1_sms' => '1', 'parent2_sms' => 'evil', 'child_address2' => '<i>Flat 2</i>', 'child_county' => 'Leics' ] );
+assert_true( $san['parent1_sms'] === '1' && $san['parent2_sms'] === '' && $san['child_address2'] === 'Flat 2' && $san['child_county'] === 'Leics', 'sanitise_input handles ticks, line 2 and county' );
+$b = valid_base();
+$b['parent1_sms'] = '1';
+$b['parent2_first_name'] = 'Sam';
+$b['parent2_email'] = 'sam@example.org';
+$b['parent2_sms'] = '1';
+$rec = OSM_Waiting_List_Email::recipients( $b );
+assert_true( $rec[0]['receive_texts'] === true && $rec[1]['receive_texts'] === false, 'receive_texts per recipient (parent 2 needs a phone)' );
+$v = OSM_Waiting_List_Email::vars( $b, 'Alex', null, true );
+assert_true( OSM_Waiting_List_Email::render( 'Texts: {receive_texts}', $v ) === 'Texts: Yes', '{receive_texts} placeholder renders Yes' );
+assert_true( OSM_Waiting_List_Email::render( '{receive_texts}', OSM_Waiting_List_Email::vars( $b, 'Sam' ) ) === 'No', '{receive_texts} defaults to No' );
+
 if ( $failures > 0 ) {
     echo "\n{$failures} failure(s)\n";
     exit( 1 );

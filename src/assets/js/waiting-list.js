@@ -5,8 +5,10 @@
  *
  * Modes (window.osmWaitingListConfig.mode):
  *  - postcodes_io: on postcode blur, look the postcode up at api.postcodes.io (free, open data,
- *    no key) to check it and fill the town if it is empty. It cannot list house addresses.
- *  - google: Google Places autocomplete restricted to the UK; fills address line 1, town, postcode.
+ *    no key) to check it and fill the town and county if they are empty. It cannot list house
+ *    addresses.
+ *  - google: Google Places autocomplete restricted to the UK; fills address line 1, line 2, town,
+ *    county and postcode.
  */
 (function () {
     'use strict';
@@ -44,6 +46,21 @@
         return r.admin_district || '';
     }
 
+    // County: admin_county exists for two-tier English areas only (null for unitary authorities,
+    // London boroughs, Scotland, Wales and Northern Ireland). Null → leave the box alone.
+    function countyFrom(r) {
+        return (r && r.admin_county) || '';
+    }
+
+    // Fill a box only if it is empty or we filled it earlier (never overwrite what the parent typed).
+    function fillIfEmpty(el, value) {
+        if (!el || !value) return;
+        if (el.value.trim() === '' || el.getAttribute('data-osm-autofilled') === '1') {
+            el.value = value;
+            el.setAttribute('data-osm-autofilled', '1');
+        }
+    }
+
     function setStatus(msg, kind) {
         var el = byId('osm_wl_postcode_status');
         if (!el) return;
@@ -54,15 +71,17 @@
     function initPostcodesIo() {
         var pcInput = byId('osm_wl_child_postcode');
         var town = byId('osm_wl_child_town');
+        var county = byId('osm_wl_child_county');
         if (!pcInput || typeof window.fetch !== 'function') return;
         var base = cfg.postcodesApi || 'https://api.postcodes.io/postcodes/';
         var lastLooked = '';
 
-        if (town) {
-            town.addEventListener('input', function () {
-                town.setAttribute('data-osm-autofilled', '0');
+        [town, county].forEach(function (el) {
+            if (!el) return;
+            el.addEventListener('input', function () {
+                el.setAttribute('data-osm-autofilled', '0');
             });
-        }
+        });
 
         pcInput.addEventListener('blur', function () {
             var c = compact(pcInput.value);
@@ -103,11 +122,8 @@
                 }
                 var r = data.result;
                 if (r.postcode) pcInput.value = r.postcode;
-                var t = townFrom(r);
-                if (town && t && (town.value.trim() === '' || town.getAttribute('data-osm-autofilled') === '1')) {
-                    town.value = t;
-                    town.setAttribute('data-osm-autofilled', '1');
-                }
+                fillIfEmpty(town, townFrom(r));
+                fillIfEmpty(county, countyFrom(r));
                 setStatus(i18n.found || '', 'ok');
             }).catch(function () {
                 // Network error, timeout or outage: say nothing and let the server decide.
@@ -120,7 +136,9 @@
 
     function fillFromComponents(components, longKey, shortKey) {
         var a1 = byId('osm_wl_child_address');
+        var a2 = byId('osm_wl_child_address2');
         var town = byId('osm_wl_child_town');
+        var county = byId('osm_wl_child_county');
         var pc = byId('osm_wl_child_postcode');
         components = components || [];
 
@@ -136,12 +154,26 @@
 
         var building = [get('subpremise'), get('premise')].filter(Boolean).join(', ');
         var street = [get('street_number'), get('route')].filter(Boolean).join(' ');
-        var line1 = [building, street].filter(Boolean).join(', ');
-        var townVal = get('postal_town') || get('locality') || get('administrative_area_level_2');
+        var townVal = get('postal_town') || get('locality');
+        // Village / district inside a post town (e.g. a village with a larger post town).
+        var area = get('sublocality_level_1') || get('sublocality') || get('neighborhood');
+        if (!area && get('locality') && get('locality') !== townVal) area = get('locality');
+        // UK: administrative_area_level_2 is the county; level 1 is the nation (England etc.).
+        var countyVal = get('administrative_area_level_2');
         var pcVal = get('postal_code');
 
+        // Line 1: building + street when there is no building name, else the building alone,
+        // with the street on line 2. Otherwise line 2 holds the village/district.
+        var line1 = building || street;
+        var line2 = building && street ? street : '';
+        if (!line2 && area && area !== townVal) line2 = area;
+        if (building && street && area && area !== townVal) line2 = street + ', ' + area;
+
+        // A chosen address replaces the whole address, so stale lines from earlier do not linger.
         if (a1 && line1) a1.value = line1;
+        if (a2) a2.value = line2;
         if (town && townVal) town.value = townVal;
+        if (county) county.value = countyVal;
         if (pc && pcVal) pc.value = normalise(pcVal);
     }
 

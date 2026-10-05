@@ -32,6 +32,8 @@ function run(mode, fetchImpl, extra) {
         osm_wl_child_postcode: makeEl('osm_wl_child_postcode'),
         osm_wl_child_town: makeEl('osm_wl_child_town'),
         osm_wl_child_address: makeEl('osm_wl_child_address'),
+        osm_wl_child_address2: makeEl('osm_wl_child_address2'),
+        osm_wl_child_county: makeEl('osm_wl_child_county'),
         osm_wl_postcode_status: makeEl('osm_wl_postcode_status'),
         osm_wl_address_search: makeEl('osm_wl_address_search'),
     };
@@ -53,7 +55,7 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
 
 (async () => {
     // postcodes.io: found, fills empty town with parish, formats postcode.
-    let t = run('postcodes_io', () => json(200, { status: 200, result: { postcode: 'LE65 1AB', parish: 'Ashby-de-la-Zouch', admin_district: 'North West Leicestershire' } }));
+    let t = run('postcodes_io', () => json(200, { status: 200, result: { postcode: 'LE65 1AB', parish: 'Ashby-de-la-Zouch', admin_district: 'North West Leicestershire', admin_county: 'Leicestershire' } }));
     t.els.osm_wl_child_postcode.value = 'le651ab';
     t.els.osm_wl_child_postcode.fire('blur');
     await tick();
@@ -61,6 +63,7 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     check(t.fetchLog[0].opts.credentials === 'omit', 'no cookies sent to postcodes.io');
     check(t.els.osm_wl_child_postcode.value === 'LE65 1AB', 'postcode reformatted');
     check(t.els.osm_wl_child_town.value === 'Ashby-de-la-Zouch', 'town filled from parish');
+    check(t.els.osm_wl_child_county.value === 'Leicestershire', 'county filled from admin_county');
     check(t.els.osm_wl_postcode_status.textContent === 'Found', 'status says found');
 
     // Unparished → admin_district; existing typed town is kept.
@@ -69,12 +72,15 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     t.els.osm_wl_child_postcode.fire('blur');
     await tick();
     check(t.els.osm_wl_child_town.value === 'Leicester', 'unparished → admin_district');
+    check(t.els.osm_wl_child_county.value === '', 'admin_county null → county left empty');
     t = run('postcodes_io', () => json(200, { status: 200, result: { postcode: 'LE1 1AA', admin_district: 'Leicester' } }));
     t.els.osm_wl_child_town.value = 'My Town';
+    t.els.osm_wl_child_county.value = 'My County';
     t.els.osm_wl_child_postcode.value = 'LE1 1AA';
     t.els.osm_wl_child_postcode.fire('blur');
     await tick();
     check(t.els.osm_wl_child_town.value === 'My Town', 'typed town not overwritten');
+    check(t.els.osm_wl_child_county.value === 'My County', 'typed county not overwritten');
 
     // 404 → not found message.
     t = run('postcodes_io', () => json(404, { status: 404, error: 'Postcode not found' }));
@@ -97,7 +103,7 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     await tick();
     check(t.els.osm_wl_postcode_status.textContent === '', 'network error → no message (server decides)');
 
-    // Google (new widget): fills address line 1, town, postcode.
+    // Google (new widget): fills address line 1, line 2, town, county, postcode.
     let created = null;
     const google = { maps: { places: {
         PlaceAutocompleteElement: function (opts) { created = makeEl('pac'); created.opts = opts; return created; },
@@ -112,13 +118,20 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
             { types: ['street_number'], longText: '12', shortText: '12' },
             { types: ['route'], longText: 'Market Street', shortText: 'Market St' },
             { types: ['postal_town'], longText: 'Ashby-de-la-Zouch', shortText: 'Ashby' },
+            { types: ['administrative_area_level_2', 'political'], longText: 'Leicestershire', shortText: 'Leics' },
+            { types: ['administrative_area_level_1', 'political'], longText: 'England', shortText: 'England' },
             { types: ['postal_code'], longText: 'le65 1ap', shortText: 'LE65 1AP' },
         ],
         fetchFields: () => Promise.resolve(),
     };
     created.fire('gmp-select', { placePrediction: { toPlace: () => place } });
     await tick();
+    t.els.osm_wl_child_address2.value = 'stale line 2';
+    created.fire('gmp-select', { placePrediction: { toPlace: () => place } });
+    await tick();
     check(t.els.osm_wl_child_address.value === '12 Market Street', 'address line 1 filled');
+    check(t.els.osm_wl_child_address2.value === '', 'line 2 cleared when the address has none');
+    check(t.els.osm_wl_child_county.value === 'Leicestershire', 'county from administrative_area_level_2 (not England)');
     check(t.els.osm_wl_child_town.value === 'Ashby-de-la-Zouch', 'town filled from postal_town');
     check(t.els.osm_wl_child_postcode.value === 'LE65 1AP', 'postcode filled');
     created.fire('gmp-error');
@@ -130,6 +143,8 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
         { types: ['premise'], long_name: 'Rose Cottage' },
         { types: ['route'], long_name: 'Mill Lane' },
         { types: ['locality'], long_name: 'Packington' },
+        { types: ['postal_town'], long_name: 'Ashby-de-la-Zouch' },
+        { types: ['administrative_area_level_2'], long_name: 'Leicestershire' },
         { types: ['postal_code'], long_name: 'LE65 1WG' },
     ] }); } } } };
     t = run('google', () => json(200, {}), { google: legacy });
@@ -137,7 +152,9 @@ const json = (status, body) => Promise.resolve({ status, ok: status >= 200 && st
     t.ctx.window.osmWlGoogleReady();
     check(acOpts && acOpts.componentRestrictions.country === 'gb', 'legacy widget restricted to the UK');
     placeCb();
-    check(t.els.osm_wl_child_address.value === 'Rose Cottage, Mill Lane' && t.els.osm_wl_child_town.value === 'Packington', 'legacy widget fills fields');
+    check(t.els.osm_wl_child_address.value === 'Rose Cottage', 'legacy: building name on line 1');
+    check(t.els.osm_wl_child_address2.value === 'Mill Lane, Packington', 'legacy: street + village on line 2');
+    check(t.els.osm_wl_child_town.value === 'Ashby-de-la-Zouch' && t.els.osm_wl_child_county.value === 'Leicestershire' && t.els.osm_wl_child_postcode.value === 'LE65 1WG', 'legacy: town, county, postcode');
 
     // Off / missing config → nothing happens.
     t = run('off', () => json(200, {}));

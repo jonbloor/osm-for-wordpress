@@ -315,6 +315,19 @@ check( $enqueue->invoke( null, true ) === 'postcodes_io' && isset( $GLOBALS['wp_
 reset_world( [ 'osm_wl_address_lookup' => 'postcodes_io' ] );
 check( $enqueue->invoke( null, false ) === 'off' && $GLOBALS['wp_scripts'] === [], 'no form on the page (e.g. after success) → no scripts' );
 
+// ---------------------------------------------------------------- 9. address + receive texts end to end
+reset_world();
+$res = OSM_Waiting_List::handle_submission( post( [ 'child_address2' => 'Packington', 'child_county' => 'Leicestershire', 'parent1_sms' => '1', 'parent2_first_name' => 'Sam', 'parent2_last_name' => 'River', 'parent2_email' => 'sam@example.org', 'parent2_phone' => '07700900456' ] ) );
+$sent = json_decode( helper_calls()[0]['args']['body'] ?? '{}', true );
+check( $res['success'] === true, 'submission with full address and texts succeeds' );
+check( ( $sent['member_details']['line_2'] ?? '' ) === 'Packington' && ( $sent['member_details']['line_4'] ?? '' ) === 'Leicestershire' && ( $sent['member_details']['line_1'] ?? '' ) === '1 High Street', 'line 1, line 2 and county sent to Helper' );
+check( ( $sent['contact1']['phone1_sms'] ?? '' ) === 'yes' && ! isset( $sent['contact2']['phone1_sms'] ), 'per-parent texts flag: parent 1 yes, parent 2 unset' );
+check( str_contains( $GLOBALS['wp_mail_log'][0]['message'], 'Receive text messages from leaders: Yes' ) && str_contains( $GLOBALS['wp_mail_log'][1]['message'], 'Receive text messages from leaders: No' ), 'email shows each parent’s texts choice' );
+
+reset_world();
+$res = OSM_Waiting_List::handle_submission( post( [ 'child_address' => '' ] ) );
+check( $res['success'] === false && isset( $res['errors']['child_address'] ) && count( helper_calls() ) === 0, 'missing address line 1: error, no Helper call' );
+
 if ( $failures > 0 ) {
     echo "\n{$failures} failure(s)\n";
     exit( 1 );

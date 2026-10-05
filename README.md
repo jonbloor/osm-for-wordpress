@@ -108,9 +108,13 @@ Example:
 
 Shows a public form for joining an OSM waiting list via OSM Helper. Configure **OSM Helper base URL** and **site key** under **OSM Settings → Waiting List**. The waiting-list **section ID** is chosen in OSM Helper Settings (not in WordPress).
 
-**Required fields:** child first name, last name, date of birth (UK day/month/year), postcode; parent 1 first name, last name, email, phone; consent checkbox.
+**Required fields:** child first name, last name, date of birth (UK day/month/year); home address line 1 and postcode; parent 1 first name, last name, email, phone; consent checkbox.
 
-**Optional fields:** address line 1, town; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required); a parent note (“Anything else we should know?”, up to 1000 characters).
+**Home address order:** Address line 1 (required), Address line 2, Town, County, Postcode (required, last). It is written to the child's own details in OSM (customdata group 6) as `address1`, `address2`, `address3` (town), `address4` (county) and `postcode`.
+
+**Receive text messages from Leaders?** One optional checkbox per parent. Ticked sets OSM's “receive SMS” flag for that parent's phone (`data[phone1_sms]=yes` on Primary Contact 1 or 2). Unticked leaves it unset, which OSM shows as no. Parent 2's box needs a parent 2 phone number.
+
+**Optional fields:** address line 2, town, county; receive-texts checkboxes; parent 2 first name, last name, email, phone (if any parent 2 field is filled, first name, last name, and email become required); a parent note (“Anything else we should know?”, up to 1000 characters).
 
 On a successful write, the submission is **not** stored in WordPress. The form uses a WordPress nonce, a honeypot field, server-side validation, and a simple per-IP rate limit. Those stay in place when spam protection is **off** (the default).
 
@@ -138,7 +142,7 @@ After OSM Helper confirms the child is on the list, WordPress sends a plain-text
 
 Settings (Waiting List tab): send confirmation (default **on**), also email parent 2 (default on), group name, From name, optional reply-to address, subject and message. Clear the subject or message to go back to the UK English default.
 
-Placeholders: `{parent_first_name}` (the parent receiving it), `{child_first_name}`, `{child_last_name}`, `{group_name}`, `{site_name}`, `{site_url}`, `{submitted_date}`, `{parent_note}`.
+Placeholders: `{parent_first_name}` (the parent receiving it), `{child_first_name}`, `{child_last_name}`, `{group_name}`, `{site_name}`, `{site_url}`, `{submitted_date}`, `{parent_note}`, `{receive_texts}` (Yes/No for the parent receiving it).
 
 Setting keys: `osm_wl_email_enabled`, `osm_wl_email_parent2` (`1`/`0`), `osm_wl_group_name`, `osm_wl_email_from_name`, `osm_wl_email_reply_to`, `osm_wl_email_subject`, `osm_wl_email_body`.
 
@@ -147,8 +151,8 @@ Setting keys: `osm_wl_email_enabled`, `osm_wl_email_parent2` (`1`/`0`), `osm_wl_
 Choose one under **OSM Settings → Waiting List → Address lookup**. Its script loads only on pages that show the `[osm_waiting_list]` form. Manual entry always still works, and it works with captcha off, reCAPTCHA or Turnstile.
 
 - **Off** (default): parents type the address.
-- **Google Places autocomplete**: parents start typing and pick an address; results are limited to the UK, and address line 1, town and postcode are filled in. You need a Google Maps JavaScript API key with **Places API (New)** enabled (a key that only has the legacy Places API falls back to Google’s older widget). Google requires **billing enabled** on the Cloud project, but there is a **monthly free allowance**, which normally covers a group waiting list. Set a budget alert to be sure. Restrict the key to your site’s address (HTTP referrer) and to those APIs. The key is public: it is included in the page. Without a key the form falls back to manual entry.
-- **postcodes.io postcode check**: **free and open data**, with no key or account. When the parent leaves the postcode box, the browser calls `https://api.postcodes.io/postcodes/{postcode}`, shows whether the postcode exists, tidies its format, and fills the town if it is empty (parish, or the local authority (`admin_district`) when there is no parish). It **cannot list house addresses**, so parents still type address line 1. You can also tick the optional **server-side check**: when the form is sent, WordPress calls `https://api.postcodes.io/postcodes/{postcode}/validate` with a 3-second timeout. Only a definite “not a postcode” blocks the form. Errors and timeouts let it through (fails open).
+- **Google Places autocomplete**: parents start typing and pick an address; results are limited to the UK, and address line 1, line 2, town, county and postcode are filled in. You need a Google Maps JavaScript API key with **Places API (New)** enabled (a key that only has the legacy Places API falls back to Google’s older widget). Google requires **billing enabled** on the Cloud project, but there is a **monthly free allowance**, which normally covers a group waiting list. Set a budget alert to be sure. Restrict the key to your site’s address (HTTP referrer) and to those APIs. The key is public: it is included in the page. Without a key the form falls back to manual entry.
+- **postcodes.io postcode check**: **free and open data**, with no key or account. When the parent leaves the postcode box, the browser calls `https://api.postcodes.io/postcodes/{postcode}`, shows whether the postcode exists, tidies its format, and fills the town and county if they are empty. The town is the parish, or the local authority (`admin_district`) when there is no parish. The county is `admin_county`, which is left blank where postcodes.io has none (unitary authorities, London, Scotland, Wales, Northern Ireland). It **cannot list house addresses**, so parents still type address line 1. You can also tick the optional **server-side check**: when the form is sent, WordPress calls `https://api.postcodes.io/postcodes/{postcode}/validate` with a 3-second timeout. Only a definite “not a postcode” blocks the form. Errors and timeouts let it through (fails open).
 
 Setting keys: `osm_wl_address_lookup` (`off`, `google`, `postcodes_io`), `osm_google_maps_api_key`, `osm_wl_postcode_server_check` (`1`/`0`).
 

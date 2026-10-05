@@ -17,6 +17,7 @@ class OSM_Waiting_List_Email {
         '{site_url}'          => 'Website address',
         '{submitted_date}'    => 'Date the form was sent (for example 5 October 2026)',
         '{parent_note}'       => 'The note the parent typed (blank if none)',
+        '{receive_texts}'     => 'Yes or No: whether this parent asked to receive text messages from leaders',
     ];
 
     /**
@@ -32,6 +33,7 @@ class OSM_Waiting_List_Email {
     public static function default_body() {
         return "Dear {parent_first_name},\n\n"
             . "Thank you for adding {child_first_name} {child_last_name} to the waiting list for {group_name}. This email confirms that we received your details on {submitted_date}.\n\n"
+            . "Receive text messages from leaders: {receive_texts}\n\n"
             . "What happens next\n"
             . "- You do not need to apply again. {child_first_name} stays on our list until we contact you.\n"
             . "- Waiting times depend on your child’s age and how many places each section has.\n"
@@ -130,9 +132,10 @@ class OSM_Waiting_List_Email {
      * @param array  $values            Sanitised form values.
      * @param string $parent_first_name Recipient's first name.
      * @param int    $now               Timestamp.
+     * @param bool   $receive_texts     Whether this recipient ticked "Receive text messages from Leaders?".
      * @return array<string, string>
      */
-    public static function vars( array $values, $parent_first_name, $now = null ) {
+    public static function vars( array $values, $parent_first_name, $now = null, $receive_texts = false ) {
         $now = $now === null ? time() : (int) $now;
         return [
             'parent_first_name' => self::single_line( (string) $parent_first_name ),
@@ -143,6 +146,7 @@ class OSM_Waiting_List_Email {
             'site_url'          => function_exists( 'home_url' ) ? (string) home_url( '/' ) : '',
             'submitted_date'    => function_exists( 'wp_date' ) ? (string) wp_date( 'j F Y', $now ) : gmdate( 'j F Y', $now ),
             'parent_note'       => (string) ( $values['parent_note'] ?? '' ),
+            'receive_texts'     => $receive_texts ? 'Yes' : 'No',
         ];
     }
 
@@ -151,17 +155,26 @@ class OSM_Waiting_List_Email {
      *
      * @param array $values         Sanitised form values.
      * @param bool  $include_parent2 Whether to add parent 2.
-     * @return array<int, array{email: string, first_name: string}>
+     * @return array<int, array{email: string, first_name: string, receive_texts: bool}>
      */
     public static function recipients( array $values, $include_parent2 = true ) {
         $out = [];
         $p1  = trim( (string) ( $values['parent1_email'] ?? '' ) );
         if ( filter_var( $p1, FILTER_VALIDATE_EMAIL ) ) {
-            $out[] = [ 'email' => $p1, 'first_name' => (string) ( $values['parent1_first_name'] ?? '' ) ];
+            $out[] = [
+                'email'         => $p1,
+                'first_name'    => (string) ( $values['parent1_first_name'] ?? '' ),
+                'receive_texts' => ( $values['parent1_sms'] ?? '' ) === '1',
+            ];
         }
         $p2 = trim( (string) ( $values['parent2_email'] ?? '' ) );
         if ( $include_parent2 && filter_var( $p2, FILTER_VALIDATE_EMAIL ) && strcasecmp( $p1, $p2 ) !== 0 ) {
-            $out[] = [ 'email' => $p2, 'first_name' => (string) ( $values['parent2_first_name'] ?? '' ) ];
+            $out[] = [
+                'email'         => $p2,
+                'first_name'    => (string) ( $values['parent2_first_name'] ?? '' ),
+                // Only sent to OSM when parent 2 also gave a phone number.
+                'receive_texts' => ( $values['parent2_sms'] ?? '' ) === '1' && trim( (string) ( $values['parent2_phone'] ?? '' ) ) !== '',
+            ];
         }
         return $out;
     }
@@ -207,7 +220,7 @@ class OSM_Waiting_List_Email {
         $any_sent = false;
         try {
             foreach ( $recipients as $recipient ) {
-                $vars    = self::vars( $values, $recipient['first_name'] );
+                $vars    = self::vars( $values, $recipient['first_name'], null, ! empty( $recipient['receive_texts'] ) );
                 $subject = self::single_line( self::render( self::subject_template(), $vars ) );
                 $body    = self::render( self::body_template(), $vars );
                 if ( wp_mail( $recipient['email'], $subject, $body, self::headers() ) ) {

@@ -73,12 +73,10 @@ $field_class = static function ( $key ) use ( $errors ) {
                     <?php if ( $err( 'child_dob' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'child_dob' ) ); ?></p><?php endif; ?>
                 </div>
 
-                <div class="<?php echo esc_attr( $field_class( 'child_postcode' ) ); ?>">
-                    <label for="osm_wl_child_postcode">Postcode <span class="osm-wl-required">(required)</span></label>
-                    <input type="text" id="osm_wl_child_postcode" name="child_postcode" required autocomplete="postal-code" value="<?php echo esc_attr( $val( 'child_postcode' ) ); ?>"<?php echo $address_lookup === 'postcodes_io' ? ' aria-describedby="osm_wl_postcode_status"' : ''; ?>>
-                    <?php if ( $address_lookup === 'postcodes_io' ) : ?><p class="osm-wl-lookup-status" id="osm_wl_postcode_status" aria-live="polite"></p><?php endif; ?>
-                    <?php if ( $err( 'child_postcode' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'child_postcode' ) ); ?></p><?php endif; ?>
-                </div>
+            </fieldset>
+
+            <fieldset class="osm-wl-fieldset">
+                <legend>Home address</legend>
 
                 <?php if ( $address_lookup === 'google' ) : ?>
                 <div class="osm-wl-field osm-wl-address-search" id="osm_wl_address_search" hidden>
@@ -88,13 +86,31 @@ $field_class = static function ( $key ) use ( $errors ) {
                 <?php endif; ?>
 
                 <div class="<?php echo esc_attr( $field_class( 'child_address' ) ); ?>">
-                    <label for="osm_wl_child_address">Address line 1 <span class="osm-wl-optional">(optional)</span></label>
-                    <input type="text" id="osm_wl_child_address" name="child_address" autocomplete="address-line1" value="<?php echo esc_attr( $val( 'child_address' ) ); ?>">
+                    <label for="osm_wl_child_address">Address line 1 <span class="osm-wl-required">(required)</span></label>
+                    <input type="text" id="osm_wl_child_address" name="child_address" required autocomplete="address-line1" value="<?php echo esc_attr( $val( 'child_address' ) ); ?>">
+                    <?php if ( $err( 'child_address' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'child_address' ) ); ?></p><?php endif; ?>
+                </div>
+
+                <div class="<?php echo esc_attr( $field_class( 'child_address2' ) ); ?>">
+                    <label for="osm_wl_child_address2">Address line 2 <span class="osm-wl-optional">(optional)</span></label>
+                    <input type="text" id="osm_wl_child_address2" name="child_address2" autocomplete="address-line2" value="<?php echo esc_attr( $val( 'child_address2' ) ); ?>">
                 </div>
 
                 <div class="<?php echo esc_attr( $field_class( 'child_town' ) ); ?>">
                     <label for="osm_wl_child_town">Town <span class="osm-wl-optional">(optional)</span></label>
                     <input type="text" id="osm_wl_child_town" name="child_town" autocomplete="address-level2" value="<?php echo esc_attr( $val( 'child_town' ) ); ?>">
+                </div>
+
+                <div class="<?php echo esc_attr( $field_class( 'child_county' ) ); ?>">
+                    <label for="osm_wl_child_county">County <span class="osm-wl-optional">(optional)</span></label>
+                    <input type="text" id="osm_wl_child_county" name="child_county" autocomplete="address-level1" value="<?php echo esc_attr( $val( 'child_county' ) ); ?>">
+                </div>
+
+                <div class="<?php echo esc_attr( $field_class( 'child_postcode' ) ); ?>">
+                    <label for="osm_wl_child_postcode">Postcode <span class="osm-wl-required">(required)</span></label>
+                    <input type="text" id="osm_wl_child_postcode" name="child_postcode" required autocomplete="postal-code" value="<?php echo esc_attr( $val( 'child_postcode' ) ); ?>"<?php echo $address_lookup === 'postcodes_io' ? ' aria-describedby="osm_wl_postcode_status"' : ''; ?>>
+                    <?php if ( $address_lookup === 'postcodes_io' ) : ?><p class="osm-wl-lookup-status" id="osm_wl_postcode_status" aria-live="polite"></p><?php endif; ?>
+                    <?php if ( $err( 'child_postcode' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'child_postcode' ) ); ?></p><?php endif; ?>
                 </div>
             </fieldset>
 
@@ -124,6 +140,13 @@ $field_class = static function ( $key ) use ( $errors ) {
                     <input type="tel" id="osm_wl_parent1_phone" name="parent1_phone" required autocomplete="tel" value="<?php echo esc_attr( $val( 'parent1_phone' ) ); ?>">
                     <?php if ( $err( 'parent1_phone' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'parent1_phone' ) ); ?></p><?php endif; ?>
                 </div>
+                <div class="<?php echo esc_attr( $field_class( 'parent1_sms' ) ); ?>">
+                    <label class="osm-wl-consent" for="osm_wl_parent1_sms">
+                        <input type="checkbox" id="osm_wl_parent1_sms" name="parent1_sms" value="1" <?php checked( $val( 'parent1_sms' ), '1' ); ?>>
+                        <span>Receive text messages from Leaders? <span class="osm-wl-optional">(optional)</span></span>
+                    </label>
+                    <p class="osm-wl-hint">Tick if leaders may send texts to this phone number.</p>
+                </div>
             </fieldset>
 
             <fieldset class="osm-wl-fieldset">
@@ -152,6 +175,13 @@ $field_class = static function ( $key ) use ( $errors ) {
                     <label for="osm_wl_parent2_phone">Phone</label>
                     <input type="tel" id="osm_wl_parent2_phone" name="parent2_phone" autocomplete="off" value="<?php echo esc_attr( $val( 'parent2_phone' ) ); ?>">
                     <?php if ( $err( 'parent2_phone' ) ) : ?><p class="osm-wl-error"><?php echo esc_html( $err( 'parent2_phone' ) ); ?></p><?php endif; ?>
+                </div>
+                <div class="<?php echo esc_attr( $field_class( 'parent2_sms' ) ); ?>">
+                    <label class="osm-wl-consent" for="osm_wl_parent2_sms">
+                        <input type="checkbox" id="osm_wl_parent2_sms" name="parent2_sms" value="1" <?php checked( $val( 'parent2_sms' ), '1' ); ?>>
+                        <span>Receive text messages from Leaders? <span class="osm-wl-optional">(optional)</span></span>
+                    </label>
+                    <p class="osm-wl-hint">Tick if leaders may send texts to parent 2’s phone number (needs a phone number above).</p>
                 </div>
             </fieldset>
 
